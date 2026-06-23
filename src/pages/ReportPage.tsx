@@ -30,6 +30,9 @@ const templates = [
 
 export default function ReportPage({ onNavigate }: Props) {
   const { profile } = useAuth()
+
+  function printPage() { window.print() }
+
   return (
     <DashboardLayout
       activePage="reports"
@@ -48,15 +51,15 @@ export default function ReportPage({ onNavigate }: Props) {
             Create and distribute academic reports for students, parents and administrators.
           </p>
           <div className="flex flex-wrap gap-3">
-            <button className="flex items-center gap-2 h-11 px-6 bg-primary text-white text-sm font-semibold rounded-pill hover:bg-primary-deep transition-colors shadow-primary">
+            <button onClick={() => onNavigate('report-builder')} className="flex items-center gap-2 h-11 px-6 bg-primary text-white text-sm font-semibold rounded-pill hover:bg-primary-deep transition-colors shadow-primary">
               <Plus size={16} />
               Generate Report
             </button>
-            <button className="flex items-center gap-2 h-11 px-6 border border-muted text-foreground text-sm font-semibold rounded-pill hover:border-primary hover:text-primary transition-colors">
+            <button onClick={printPage} className="flex items-center gap-2 h-11 px-6 border border-muted text-foreground text-sm font-semibold rounded-pill hover:border-primary hover:text-primary transition-colors">
               <Download size={16} />
               Export Reports
             </button>
-            <button className="flex items-center gap-2 h-11 px-6 border border-muted text-foreground text-sm font-semibold rounded-pill hover:border-primary hover:text-primary transition-colors">
+            <button onClick={() => onNavigate('teacher-calendar')} className="flex items-center gap-2 h-11 px-6 border border-muted text-foreground text-sm font-semibold rounded-pill hover:border-primary hover:text-primary transition-colors">
               <Clock size={16} />
               Schedule Report
             </button>
@@ -86,6 +89,7 @@ export default function ReportPage({ onNavigate }: Props) {
             {templates.map(tpl => (
               <button
                 key={tpl.label}
+                onClick={() => onNavigate('report-builder')}
                 className="flex items-center gap-3 p-4 border border-black/8 rounded-card hover:border-primary hover:bg-primary/4 transition-colors text-left group"
               >
                 <span className="text-2xl select-none">{tpl.icon}</span>
@@ -131,8 +135,10 @@ export default function ReportPage({ onNavigate }: Props) {
                     </td>
                     <td className="px-6 py-4 text-muted">{r.size}</td>
                     <td className="px-6 py-4">
-                      <button className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline disabled:opacity-40 disabled:no-underline"
+                      <button
+                        onClick={r.status !== 'Scheduled' ? printPage : undefined}
                         disabled={r.status === 'Scheduled'}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline disabled:opacity-40 disabled:no-underline"
                       >
                         <Download size={12} />
                         Download

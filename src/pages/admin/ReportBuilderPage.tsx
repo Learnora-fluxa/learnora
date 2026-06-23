@@ -147,7 +147,24 @@ export default function ReportBuilderPage({ onNavigate }: Props) {
                 <p className="text-sm font-bold text-foreground">{metricLabels[metric]} Report</p>
                 <p className="text-xs text-muted mt-0.5">{termFilter} · {classFilter === 'All' ? 'All Classes' : classFilter}</p>
               </div>
-              <button className="flex items-center gap-2 h-9 px-4 bg-primary text-white text-xs font-semibold rounded-pill hover:bg-primary-deep transition-colors">
+              <button
+                onClick={() => {
+                  let csv = ''
+                  if (metric === 'grades') {
+                    csv = 'Class,Subject,Avg Score,Pass Rate %,Fail Rate %\n' + gradeRows.filter(r => classFilter === 'All' || r.class === classFilter).map(r => `${r.class},${r.subject},${r.avg},${r.pass},${r.fail}`).join('\n')
+                  } else if (metric === 'attendance') {
+                    csv = 'Class,Total Students,Present,Absent,Rate %\n' + attendanceRows.filter(r => classFilter === 'All' || r.class === classFilter).map(r => `${r.class},${r.students},${r.present},${r.absent},${r.rate}`).join('\n')
+                  } else if (metric === 'fees') {
+                    csv = 'Student,Class,Term 1,Term 2,Term 3\n' + feeRows.filter(r => classFilter === 'All' || r.class === classFilter).map(r => `${r.name},${r.class},${r.term1},${r.term2},${r.term3}`).join('\n')
+                  } else {
+                    csv = 'Class,Boys,Girls,Total,New Students\n' + enrollmentRows.filter(r => classFilter === 'All' || r.class === classFilter).map(r => `${r.class},${r.boys},${r.girls},${r.total},${r.new}`).join('\n')
+                  }
+                  const blob = new Blob([csv], { type: 'text/csv' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a'); a.href = url; a.download = `${metric}_report_${termFilter.replace('/', '-')}.csv`; a.click(); URL.revokeObjectURL(url)
+                }}
+                className="flex items-center gap-2 h-9 px-4 bg-primary text-white text-xs font-semibold rounded-pill hover:bg-primary-deep transition-colors"
+              >
                 <Download size={13} /> Export CSV
               </button>
             </div>
