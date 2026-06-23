@@ -220,7 +220,12 @@ CREATE POLICY "own_claims" ON badge_claims
 
 ---
 
+## System Map
+`SYSTEM_MAP.md` — complete per-role screen tree with data sources (real/scaffold/mock) and nav flows.
+
+---
+
 ## Git / Deploy
 - Repo: `github.com/fiyeduala/learnora`
 - Deploy: Vercel auto-deploys on push to `main`
-- Latest commit: `002dc6d` — Option B: Paystack webhook Edge Function + real inline payment
+- Latest batch commits: `002dc6d`→`5632e51` (Batches 2–4) + fix `DashboardLayout` AI target

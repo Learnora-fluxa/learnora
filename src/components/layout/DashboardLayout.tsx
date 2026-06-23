@@ -27,8 +27,10 @@ export default function DashboardLayout({
   nav,
   user,
   mainClassName,
-  aiPage = 'ai-assistant',
+  aiPage: aiPageProp,
 }: Props) {
+  // Student pages omit nav (Sidebar defaults to studentNav); teacher/admin pages pass nav explicitly
+  const aiPage = aiPageProp ?? (nav === undefined ? 'ai-tutor' : 'ai-assistant')
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   function handleNavigate(page: string) {
