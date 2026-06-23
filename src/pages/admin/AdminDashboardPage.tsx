@@ -189,7 +189,19 @@ export default function AdminDashboardPage({ onNavigate }: Props) {
                   {loading ? (
                     <tr><td colSpan={4} className="px-6 py-10 text-center text-sm text-muted">Loading...</td></tr>
                   ) : recentUsers.length === 0 ? (
-                    <tr><td colSpan={4} className="px-6 py-10 text-center text-sm text-muted">No users yet. Add your first user to get started.</td></tr>
+                    <tr>
+                      <td colSpan={4} className="px-6 py-12 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <span className="text-4xl">👥</span>
+                          <p className="text-sm font-semibold text-foreground mt-1">No users yet</p>
+                          <p className="text-xs text-muted">Invite teachers and students to get started.</p>
+                          <button onClick={() => onNavigate('user-management')}
+                            className="mt-2 flex items-center gap-1.5 h-8 px-4 bg-primary text-white text-xs font-semibold rounded-pill hover:bg-primary-deep transition-colors">
+                            <Plus size={11} /> Add Users
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   ) : recentUsers.map(u => (
                     <tr key={u.id} className="border-b border-black/4 last:border-0 hover:bg-canvas/40 transition-colors">
                       <td className="px-6 py-3.5">

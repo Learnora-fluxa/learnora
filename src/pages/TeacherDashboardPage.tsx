@@ -251,7 +251,11 @@ export default function TeacherDashboardPage({ onNavigate }: Props) {
             {loading ? (
               <p className="text-sm text-muted py-4 text-center">Loading…</p>
             ) : myClasses.length === 0 ? (
-              <p className="text-sm text-muted py-4 text-center">No classes assigned yet.</p>
+              <div className="py-8 flex flex-col items-center gap-2 text-center">
+                <span className="text-3xl">🏫</span>
+                <p className="text-sm font-semibold text-foreground">No classes yet</p>
+                <p className="text-xs text-muted">Your admin will assign classes to you soon.</p>
+              </div>
             ) : (
               <div className="flex flex-col gap-3">
                 {myClasses.slice(0, 4).map((c, i) => (
@@ -283,7 +287,11 @@ export default function TeacherDashboardPage({ onNavigate }: Props) {
             {loading ? (
               <p className="text-sm text-muted py-4 text-center">Loading…</p>
             ) : activity.length === 0 ? (
-              <p className="text-sm text-muted py-4 text-center">No recent submissions.</p>
+              <div className="py-8 flex flex-col items-center gap-2 text-center">
+                <span className="text-3xl">📬</span>
+                <p className="text-sm font-semibold text-foreground">No submissions yet</p>
+                <p className="text-xs text-muted">Student submissions will appear here.</p>
+              </div>
             ) : (
               <div className="flex flex-col gap-3">
                 {activity.map((a, i) => (
@@ -355,7 +363,19 @@ export default function TeacherDashboardPage({ onNavigate }: Props) {
                 {loading ? (
                   <tr><td colSpan={5} className="px-6 py-8 text-center text-sm text-muted">Loading…</td></tr>
                 ) : assignments.length === 0 ? (
-                  <tr><td colSpan={5} className="px-6 py-8 text-center text-sm text-muted">No assignments yet.</td></tr>
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center gap-2">
+                        <span className="text-3xl">📝</span>
+                        <p className="text-sm font-semibold text-foreground">No assignments yet</p>
+                        <p className="text-xs text-muted">Create your first assignment to get started.</p>
+                        <button onClick={() => onNavigate('assignment-builder')}
+                          className="mt-2 flex items-center gap-1.5 h-8 px-4 bg-primary text-white text-xs font-semibold rounded-pill hover:bg-primary-deep transition-colors">
+                          Create Assignment
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                 ) : assignments.map(a => {
                   const st    = assignmentStatus(a.due_date)
                   const label = st === 'active' ? 'Active' : st === 'pending' ? 'Pending' : 'Completed'
