@@ -13,7 +13,7 @@ interface School {
   state: string | null
   subscription_plan: string
   subscription_status: string
-  student_count: number
+  student_count: number  // denormalized; we re-compute from profiles for accuracy
   created_at: string
 }
 
@@ -24,23 +24,31 @@ function fmtStatus(s: string): string {
 export default function SuperAdminDashboardPage({ onNavigate }: Props) {
   const { profile } = useAuth()
   const sidebarUser  = profileToSidebarUser(profile)
-  const [schools,  setSchools]  = useState<School[]>([])
-  const [loading,  setLoading]  = useState(true)
+  const [schools,      setSchools]      = useState<School[]>([])
+  const [totalStudents, setTotalStudents] = useState(0)
+  const [loading,      setLoading]      = useState(true)
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from('schools')
-        .select('id, name, state, subscription_plan, subscription_status, student_count, created_at')
-        .order('created_at', { ascending: false })
-      setSchools((data as School[]) ?? [])
+      const [schoolsRes, studentsRes] = await Promise.all([
+        supabase
+          .from('schools')
+          .select('id, name, state, subscription_plan, subscription_status, student_count, created_at')
+          .order('created_at', { ascending: false }),
+        // Count from profiles (same source admin uses) so counts are always consistent
+        supabase
+          .from('profiles')
+          .select('id', { count: 'exact', head: true })
+          .eq('role', 'student'),
+      ])
+      setSchools((schoolsRes.data as School[]) ?? [])
+      setTotalStudents(studentsRes.count ?? 0)
       setLoading(false)
     }
     load()
   }, [])
 
   const activeSchools = schools.filter(s => s.subscription_status === 'active').length
-  const totalStudents = schools.reduce((sum, s) => sum + (s.student_count ?? 0), 0)
 
   const stats = [
     { label: 'MRR',            value: '—',                   color: 'text-primary'    },

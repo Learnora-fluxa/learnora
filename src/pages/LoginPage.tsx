@@ -161,13 +161,35 @@ export default function LoginPage({ onNavigate }: Props) {
               {loading ? 'Signing in…' : 'Log in'}
             </button>
 
-            {/* Create account */}
+            {/* Role entry points */}
+            <div className="rounded-xl border border-black/10 bg-canvas p-4">
+              <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Who are you signing in as?</p>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {[
+                  { role: 'Student',  note: 'Use your invite email' },
+                  { role: 'Teacher',  note: 'Use your invite email' },
+                  { role: 'Parent',   note: 'Use your invite email' },
+                  { role: 'Admin',    note: 'School administrator'  },
+                ].map(r => (
+                  <div key={r.role} className="flex flex-col gap-0.5 rounded-lg bg-surface border border-black/8 px-3 py-2">
+                    <span className="text-xs font-bold text-foreground">{r.role}</span>
+                    <span className="text-[11px] text-muted">{r.note}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted leading-relaxed">
+                All roles use the same login form above. First time? Check your email for an invitation from your school. No invite?{' '}
+                <span className="font-semibold text-foreground">Contact your school admin.</span>
+              </p>
+            </div>
+
+            {/* Register school */}
             <button
               type="button"
               onClick={() => onNavigate('signup')}
-              className="text-base font-semibold text-foreground text-center hover:text-primary transition-colors"
+              className="text-sm font-semibold text-primary text-center hover:underline transition-colors"
             >
-              Create new account
+              Register a new school →
             </button>
 
             {/* Divider */}

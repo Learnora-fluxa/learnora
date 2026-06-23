@@ -81,11 +81,16 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
 
       const userId = authData.user.id
 
-      // 2. Generate school code and create school record
-      const code = generateSchoolCode(schoolName)
-      const { data: school, error: schoolError } = await supabase
+      // 2. Generate school ID + code client-side to avoid the RLS chicken-and-egg:
+      //    the schools_read policy checks get_my_school_id(), but the profile hasn't
+      //    been updated with school_id yet at this point, so a SELECT after INSERT
+      //    would return 0 rows. Pre-generating the ID lets us skip the SELECT entirely.
+      const schoolId = crypto.randomUUID()
+      const code     = generateSchoolCode(schoolName)
+      const { error: schoolError } = await supabase
         .from('schools')
         .insert({
+          id:      schoolId,
           name:    schoolName,
           code,
           email:   schoolEmail,
@@ -93,8 +98,6 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
           address: schoolAddress,
           state:   schoolState,
         })
-        .select('id, code')
-        .single()
 
       if (schoolError) throw schoolError
 
@@ -102,7 +105,7 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
       const { error: profileError } = await supabase
         .from('profiles')
         .update({
-          school_id: school.id,
+          school_id: schoolId,
           role:      'admin',
           full_name: adminName,
           email:     adminEmail,
@@ -116,7 +119,7 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
       const now = new Date()
       const yr  = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1
       await supabase.from('terms').insert({
-        school_id:  school.id,
+        school_id:  schoolId,
         name:       `First Term ${yr}/${yr + 1}`,
         start_date: `${yr}-09-01`,
         end_date:   `${yr + 1}-01-31`,
@@ -130,26 +133,26 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
       ]
       const { data: subRows } = await supabase
         .from('subjects')
-        .insert(defaultSubjects.map(name => ({ name, school_id: school.id })))
+        .insert(defaultSubjects.map(name => ({ name, school_id: schoolId })))
         .select('id, name')
 
       // One starter class (SS1A) with all subjects
       if (subRows && subRows.length > 0) {
         const { data: cls } = await supabase
           .from('classes')
-          .insert({ school_id: school.id, name: 'SS1A', level: 'SS1', arm: 'A' })
+          .insert({ school_id: schoolId, name: 'SS1A', level: 'SS1', arm: 'A' })
           .select('id')
           .single()
         if (cls) {
           await supabase.from('class_subjects').insert(
             subRows.map((s: { id: string; name: string }) => ({
-              class_id: cls.id, subject_id: s.id, school_id: school.id,
+              class_id: cls.id, subject_id: s.id, school_id: schoolId,
             }))
           )
         }
       }
 
-      setSchoolCode(school.code)
+      setSchoolCode(code)
       setStep('done')
     } catch (err: unknown) {
       logSupabaseError('SchoolSignUp', err as any)
