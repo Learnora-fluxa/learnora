@@ -94,7 +94,7 @@ export default function ScheduleLiveClassPage({ onNavigate }: Props) {
     const scheduledAt = new Date(`${form.date}T${form.time}`).toISOString()
 
     const { error: insertErr } = await supabase.from('live_sessions').insert({
-      school_id:        profile!.school_id,
+      school_id:        profile!.school_id!,
       teacher_id:       profile!.id,
       class_id:         form.classId,
       subject_id:       form.subjectId,

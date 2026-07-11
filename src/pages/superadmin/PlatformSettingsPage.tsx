@@ -27,8 +27,6 @@ function ToggleRow({ label, description, value, onChange }: {
   )
 }
 
-const db = supabase as unknown as { from: (t: string) => any }
-
 const DEFAULTS = {
   platform_name:   'Learnora',
   support_email:   'support@learnora.io',
@@ -73,7 +71,7 @@ export default function PlatformSettingsPage({ onNavigate }: Props) {
 
   async function loadSettings() {
     setLoading(true)
-    const { data, error } = await db.from('platform_settings').select('key, value')
+    const { data, error } = await supabase.from('platform_settings').select('key, value')
     if (error) {
       logSupabaseError('PlatformSettings/load', error)
       setLoading(false)
@@ -147,7 +145,7 @@ export default function PlatformSettingsPage({ onNavigate }: Props) {
       updated_by: profile?.id ?? null,
     }))
 
-    const { error } = await db.from('platform_settings').upsert(rows, { onConflict: 'key' })
+    const { error } = await supabase.from('platform_settings').upsert(rows, { onConflict: 'key' })
     if (error) {
       logSupabaseError('PlatformSettings/save', error)
       setSaveError(error.message)

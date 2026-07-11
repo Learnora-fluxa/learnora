@@ -1109,11 +1109,15 @@ export type Database = {
       invoices: {
         Row: {
           amount: number
+          confirmed_at: string | null
+          confirmed_by: string | null
           created_at: string | null
           due_date: string | null
           fee_structure_id: string | null
           id: string
           paid_amount: number | null
+          payment_method: string | null
+          paystack_reference: string | null
           school_id: string
           status: string | null
           student_id: string
@@ -1121,11 +1125,15 @@ export type Database = {
         }
         Insert: {
           amount: number
+          confirmed_at?: string | null
+          confirmed_by?: string | null
           created_at?: string | null
           due_date?: string | null
           fee_structure_id?: string | null
           id?: string
           paid_amount?: number | null
+          payment_method?: string | null
+          paystack_reference?: string | null
           school_id: string
           status?: string | null
           student_id: string
@@ -1133,11 +1141,15 @@ export type Database = {
         }
         Update: {
           amount?: number
+          confirmed_at?: string | null
+          confirmed_by?: string | null
           created_at?: string | null
           due_date?: string | null
           fee_structure_id?: string | null
           id?: string
           paid_amount?: number | null
+          payment_method?: string | null
+          paystack_reference?: string | null
           school_id?: string
           status?: string | null
           student_id?: string
@@ -1709,6 +1721,7 @@ export type Database = {
           full_name: string | null
           id: string
           is_active: boolean | null
+          notification_prefs: Record<string, boolean> | null
           phone: string | null
           role: string
           school_id: string | null
@@ -1720,6 +1733,7 @@ export type Database = {
           full_name?: string | null
           id: string
           is_active?: boolean | null
+          notification_prefs?: Record<string, boolean> | null
           phone?: string | null
           role?: string
           school_id?: string | null
@@ -1731,6 +1745,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           is_active?: boolean | null
+          notification_prefs?: Record<string, boolean> | null
           phone?: string | null
           role?: string
           school_id?: string | null
@@ -1804,6 +1819,8 @@ export type Database = {
         Row: {
           account_name: string | null
           account_number: string | null
+          bank_account_name: string | null
+          bank_account_number: string | null
           bank_name: string | null
           id: string
           paystack_public_key: string | null
@@ -1815,6 +1832,8 @@ export type Database = {
         Insert: {
           account_name?: string | null
           account_number?: string | null
+          bank_account_name?: string | null
+          bank_account_number?: string | null
           bank_name?: string | null
           id?: string
           paystack_public_key?: string | null
@@ -1826,6 +1845,8 @@ export type Database = {
         Update: {
           account_name?: string | null
           account_number?: string | null
+          bank_account_name?: string | null
+          bank_account_number?: string | null
           bank_name?: string | null
           id?: string
           paystack_public_key?: string | null
@@ -1856,6 +1877,9 @@ export type Database = {
           phone: string | null
           state: string | null
           student_count: number | null
+          subscription_confirmed_at: string | null
+          subscription_confirmed_by: string | null
+          subscription_payment_method: string | null
           subscription_plan: string | null
           subscription_status: string | null
         }
@@ -1870,6 +1894,9 @@ export type Database = {
           phone?: string | null
           state?: string | null
           student_count?: number | null
+          subscription_confirmed_at?: string | null
+          subscription_confirmed_by?: string | null
+          subscription_payment_method?: string | null
           subscription_plan?: string | null
           subscription_status?: string | null
         }
@@ -1884,6 +1911,9 @@ export type Database = {
           phone?: string | null
           state?: string | null
           student_count?: number | null
+          subscription_confirmed_at?: string | null
+          subscription_confirmed_by?: string | null
+          subscription_payment_method?: string | null
           subscription_plan?: string | null
           subscription_status?: string | null
         }
@@ -1967,26 +1997,35 @@ export type Database = {
         Row: {
           body: string | null
           created_at: string | null
+          created_by: string | null
           id: string
+          priority: string | null
           school_id: string | null
           status: string | null
           subject: string
+          updated_at: string | null
         }
         Insert: {
           body?: string | null
           created_at?: string | null
+          created_by?: string | null
           id?: string
+          priority?: string | null
           school_id?: string | null
           status?: string | null
           subject: string
+          updated_at?: string | null
         }
         Update: {
           body?: string | null
           created_at?: string | null
+          created_by?: string | null
           id?: string
+          priority?: string | null
           school_id?: string | null
           status?: string | null
           subject?: string
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -2098,6 +2137,174 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      email_templates: {
+        Row: {
+          body: string
+          category: string | null
+          id: string
+          key: string
+          name: string
+          subject: string | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          body: string
+          category?: string | null
+          id?: string
+          key: string
+          name: string
+          subject?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          body?: string
+          category?: string | null
+          id?: string
+          key?: string
+          name?: string
+          subject?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      quiz_questions: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          explanation: string | null
+          id: string
+          lesson_id: string | null
+          options: unknown | null
+          order_index: number | null
+          points: number | null
+          question: string
+          school_id: string
+          type: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          explanation?: string | null
+          id?: string
+          lesson_id?: string | null
+          options?: unknown | null
+          order_index?: number | null
+          points?: number | null
+          question: string
+          school_id: string
+          type: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          explanation?: string | null
+          id?: string
+          lesson_id?: string | null
+          options?: unknown | null
+          order_index?: number | null
+          points?: number | null
+          question?: string
+          school_id?: string
+          type?: string
+        }
+        Relationships: []
+      }
+      teacher_resources: {
+        Row: {
+          admin_note: string | null
+          class_id: string | null
+          created_at: string | null
+          file_url: string | null
+          id: string
+          school_id: string
+          status: string | null
+          subject_id: string | null
+          teacher_id: string
+          title: string
+          type: string
+        }
+        Insert: {
+          admin_note?: string | null
+          class_id?: string | null
+          created_at?: string | null
+          file_url?: string | null
+          id?: string
+          school_id: string
+          status?: string | null
+          subject_id?: string | null
+          teacher_id: string
+          title: string
+          type: string
+        }
+        Update: {
+          admin_note?: string | null
+          class_id?: string | null
+          created_at?: string | null
+          file_url?: string | null
+          id?: string
+          school_id?: string
+          status?: string | null
+          subject_id?: string | null
+          teacher_id?: string
+          title?: string
+          type?: string
+        }
+        Relationships: []
+      }
+      platform_config: {
+        Row: {
+          bank_account_name: string | null
+          bank_account_number: string | null
+          bank_name: string | null
+          id: string
+          per_student_price: number | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          bank_account_name?: string | null
+          bank_account_number?: string | null
+          bank_name?: string | null
+          id?: string
+          per_student_price?: number | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          bank_account_name?: string | null
+          bank_account_number?: string | null
+          bank_name?: string | null
+          id?: string
+          per_student_price?: number | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      platform_settings: {
+        Row: {
+          key: string
+          updated_at: string | null
+          updated_by: string | null
+          value: string | null
+        }
+        Insert: {
+          key: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value?: string | null
+        }
+        Update: {
+          key?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value?: string | null
+        }
+        Relationships: []
       }
     }
     Views: {

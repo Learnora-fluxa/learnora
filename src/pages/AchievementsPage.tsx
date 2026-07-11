@@ -55,7 +55,7 @@ export default function AchievementsPage({ onNavigate }: Props) {
         .not('completed_at', 'is', null)
         .order('completed_at', { ascending: true }),
       supabase.from('grade_summaries')
-        .select('subject_id, avg_score, max_score')
+        .select('subject_id, average_score')
         .eq('student_id', sid).eq('school_id', schoolId),
       supabase.from('attendance_records')
         .select('status')
@@ -68,7 +68,7 @@ export default function AchievementsPage({ onNavigate }: Props) {
     ])
 
     const lpRows  = (lpRes.data  ?? []) as { completed_at: string; lesson_id: string }[]
-    const gsRows  = (gsRes.data  ?? []) as { subject_id: string; avg_score: number | null; max_score: number | null }[]
+    const gsRows  = (gsRes.data  ?? []) as { subject_id: string; average_score: number | null }[]
     const attRows = (attRes.data ?? []) as { status: string }[]
     const subRows = (subRes.data ?? []) as { id: string; submitted_at: string }[]
 
@@ -85,10 +85,7 @@ export default function AchievementsPage({ onNavigate }: Props) {
 
     // Average grade across all subjects
     const avgGrade = gsRows.length > 0
-      ? gsRows.reduce((sum, g) => {
-          const pct = (g.max_score ?? 0) > 0 ? ((g.avg_score ?? 0) / g.max_score!) * 100 : 0
-          return sum + pct
-        }, 0) / gsRows.length
+      ? gsRows.reduce((sum, g) => sum + (g.average_score ?? 0), 0) / gsRows.length
       : 0
 
     const hasAbsence = attRows.some(a => a.status === 'absent')
@@ -97,7 +94,7 @@ export default function AchievementsPage({ onNavigate }: Props) {
       return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
     }
 
-    const joinedDate   = (profile as { created_at?: string }).created_at ? fmtDate((profile as { created_at: string }).created_at) : ''
+    const joinedDate   = profile?.created_at ? fmtDate(profile.created_at) : ''
     const firstLesson  = lpRows[0]?.completed_at  ? fmtDate(lpRows[0].completed_at) : ''
     const firstSubmit  = subRows[0]?.submitted_at ? fmtDate(subRows[0].submitted_at) : ''
 

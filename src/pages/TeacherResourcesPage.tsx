@@ -155,7 +155,7 @@ export default function TeacherResourcesPage({ onNavigate }: Props) {
         .from('teacher-resources')
         .upload(path, newFile, { upsert: false })
       if (upErr) {
-        logSupabaseError('Resources/upload', upErr)
+        logSupabaseError('Resources/upload', upErr as any)
         setFormError('File upload failed. Please try again.')
         setSaving(false)
         return

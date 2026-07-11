@@ -10,7 +10,6 @@ import {
   DailyAudio,
   useScreenShare,
   useAppMessage,
-  useSendAppMessage,
   useMeetingState,
   useVideoTrack,
   useAudioTrack,
@@ -129,8 +128,8 @@ function LiveRoomInner({
     else if (mode === 'screenshare') setMode('gallery')
   }, [screens.length])
 
-  // Receive chat messages from other participants
-  useAppMessage({
+  // Receive chat messages and get sender function
+  const sendMsg = useAppMessage({
     onAppMessage: useCallback((evt: { data: { type?: string; text?: string; sender?: string } }) => {
       if (evt.data?.type !== 'chat') return
       const now = new Date()
@@ -141,8 +140,6 @@ function LiveRoomInner({
       }])
     }, []),
   })
-
-  const sendMsg = useSendAppMessage()
 
   function handleSend() {
     const text = msg.trim()
@@ -284,7 +281,7 @@ function LiveRoomInner({
               {/* Thumbnail strip of participants */}
               {allParticipantIds.length > 0 && (
                 <div className="flex gap-2 h-24 overflow-x-auto shrink-0">
-                  {allParticipantIds.slice(0, 6).map((id, i) => (
+                  {allParticipantIds.slice(0, 6).map((id) => (
                     <div key={id} className="h-full aspect-video bg-[#1a2035] rounded-lg overflow-hidden shrink-0">
                       <DailyVideo sessionId={id} type="video" fit="cover" mirror={id === localId} className="w-full h-full" />
                     </div>

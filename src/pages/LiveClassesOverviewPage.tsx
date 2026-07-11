@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Video, Calendar, Clock, Users, Play, Loader2, AlertCircle } from 'lucide-react'
+import { Video, Calendar, Clock, Users, Loader2, AlertCircle } from 'lucide-react'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
