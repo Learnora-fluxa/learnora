@@ -24,25 +24,24 @@ function fmtStatus(s: string): string {
 export default function SuperAdminDashboardPage({ onNavigate }: Props) {
   const { profile } = useAuth()
   const sidebarUser  = profileToSidebarUser(profile)
-  const [schools,      setSchools]      = useState<School[]>([])
+  const [schools,       setSchools]       = useState<School[]>([])
   const [totalStudents, setTotalStudents] = useState(0)
-  const [loading,      setLoading]      = useState(true)
+  const [totalTeachers, setTotalTeachers] = useState(0)
+  const [loading,       setLoading]       = useState(true)
 
   useEffect(() => {
     async function load() {
-      const [schoolsRes, studentsRes] = await Promise.all([
+      const [schoolsRes, studentsRes, teachersRes] = await Promise.all([
         supabase
           .from('schools')
           .select('id, name, state, subscription_plan, subscription_status, student_count, created_at')
           .order('created_at', { ascending: false }),
-        // Count from profiles (same source admin uses) so counts are always consistent
-        supabase
-          .from('profiles')
-          .select('id', { count: 'exact', head: true })
-          .eq('role', 'student'),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student'),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'teacher'),
       ])
       setSchools((schoolsRes.data as School[]) ?? [])
       setTotalStudents(studentsRes.count ?? 0)
+      setTotalTeachers(teachersRes.count ?? 0)
       setLoading(false)
     }
     load()
@@ -51,10 +50,10 @@ export default function SuperAdminDashboardPage({ onNavigate }: Props) {
   const activeSchools = schools.filter(s => s.subscription_status === 'active').length
 
   const stats = [
-    { label: 'MRR',            value: '—',                   color: 'text-primary'    },
-    { label: 'Active Schools', value: loading ? '…' : String(activeSchools), color: 'text-accent-mint' },
-    { label: 'Total Students', value: loading ? '…' : totalStudents.toLocaleString(), color: 'text-foreground' },
-    { label: 'Churn Rate',     value: '—',                   color: 'text-green-600'  },
+    { label: 'Total Schools',  value: loading ? '…' : schools.length.toLocaleString(),    color: 'text-primary'    },
+    { label: 'Active Schools', value: loading ? '…' : activeSchools.toLocaleString(),     color: 'text-accent-mint' },
+    { label: 'Total Students', value: loading ? '…' : totalStudents.toLocaleString(),     color: 'text-foreground' },
+    { label: 'Total Teachers', value: loading ? '…' : totalTeachers.toLocaleString(),     color: 'text-green-600'  },
   ]
 
   return (
@@ -67,6 +66,14 @@ export default function SuperAdminDashboardPage({ onNavigate }: Props) {
       user={sidebarUser}
     >
       <div className="max-w-[1300px] flex flex-col gap-6">
+
+        {/* Platform identity banner */}
+        <div className="flex items-center gap-3 px-5 py-3 bg-indigo-950 rounded-card">
+          <span className="size-2 rounded-full bg-indigo-400 animate-pulse shrink-0" />
+          <p className="text-xs font-semibold tracking-widest uppercase text-indigo-300">
+            Platform Administration — All Schools
+          </p>
+        </div>
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

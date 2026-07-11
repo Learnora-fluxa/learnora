@@ -229,6 +229,17 @@ import ChildAttendancePage       from './pages/parent/ChildAttendancePage'
 import ReportCardsPage           from './pages/parent/ReportCardsPage'
 
 // ── Auth guards ───────────────────────────────────────────────────────────────
+function getDashboardPath(role: string): string {
+  const map: Record<string, string> = {
+    student:     'dashboard',
+    teacher:     'teacher-dashboard',
+    admin:       'admin-dashboard',
+    parent:      'parent/home',
+    super_admin: 'super-dashboard',
+  }
+  return map[role] ?? 'login'
+}
+
 function ProtectedRoute() {
   const { session, loading } = useAuth()
   if (loading) return (
@@ -243,7 +254,10 @@ function ProtectedRoute() {
 function RoleRoute({ roles }: { roles: string[] }) {
   const { profile, loading } = useAuth()
   if (loading) return null
-  if (!profile || !roles.includes(profile.role)) return <Navigate to="/login" replace />
+  if (!profile) return <Navigate to="/login" replace />
+  if (!roles.includes(profile.role)) {
+    return <Navigate to={`/${getDashboardPath(profile.role)}`} replace />
+  }
   return <Outlet />
 }
 
@@ -467,10 +481,8 @@ function ReportCardsRoute()     { const n = useNav(); return <ReportCardsPage   
 export default function App() {
   return (
     <Routes>
-      {/* Landing */}
+      {/* Public */}
       <Route path="/"                    element={<LandingRoute />} />
-
-      {/* Public auth routes — no session required */}
       <Route path="/login"               element={<LoginRoute />} />
       <Route path="/signup"              element={<SignUpRoute />} />
       <Route path="/otp-verify"          element={<OTPRoute />} />
@@ -483,175 +495,167 @@ export default function App() {
       <Route path="/onboarding"          element={<OnboardingRoute />} />
       <Route path="/onboarding-carousel" element={<OnboardingCarouselRoute />} />
 
-      {/* All routes below require an active session */}
       <Route element={<ProtectedRoute />}>
 
-        {/* Post-signup flow — session exists but role may not be set yet */}
-        <Route path="/role-select"         element={<RoleSelectRoute />} />
-        <Route path="/complete-profile"    element={<CompleteProfileRoute />} />
+        {/* Post-signup — role not yet assigned */}
+        <Route path="/role-select"          element={<RoleSelectRoute />} />
+        <Route path="/complete-profile"     element={<CompleteProfileRoute />} />
 
-        {/* Desktop student */}
-        <Route path="/dashboard"           element={<DashboardRoute />} />
-        <Route path="/courses"             element={<CoursesRoute />} />
-        <Route path="/course-details"      element={<CourseDetailsRoute />} />
-        <Route path="/assignments"         element={<AssignmentsRoute />} />
-        <Route path="/analysis"            element={<AnalysisRoute />} />
-        <Route path="/calendar"            element={<CalendarRoute />} />
-        <Route path="/event-details"       element={<EventDetailsRoute />} />
-        <Route path="/messages"            element={<MessagesRoute />} />
-        <Route path="/group-chat"          element={<GroupChatRoute />} />
-        <Route path="/announcements"       element={<AnnouncementsRoute />} />
-        <Route path="/ai-tutor"            element={<AITutorRoute />} />
-        <Route path="/notifications"       element={<NotifsRoute />} />
+        {/* Shared utilities — all authenticated roles */}
+        <Route path="/settings"             element={<SettingsRoute />} />
+        <Route path="/profile-settings"     element={<ProfileSetRoute />} />
+        <Route path="/notif-settings"       element={<NotifSetRoute />} />
+        <Route path="/security-settings"    element={<SecuritySetRoute />} />
+        <Route path="/search"               element={<SearchRoute />} />
+        <Route path="/404"                  element={<EmptyRoute />} />
+        <Route path="/2fa-setup"            element={<TwoFARoute />} />
+        <Route path="/connected-devices"    element={<ConnectedDevicesRoute />} />
+        <Route path="/privacy-settings"     element={<PrivacySettingsRoute />} />
+        <Route path="/linked-accounts"      element={<LinkedAccountsRoute />} />
+        <Route path="/storage-management"   element={<StorageMgmtRoute />} />
+        <Route path="/offline-sync"         element={<OfflineSyncRoute />} />
+        <Route path="/appearance-settings"  element={<AppearanceRoute />} />
+        <Route path="/add-event"            element={<AddEventRoute />} />
+        <Route path="/announcement-details" element={<AnnouncDetailRoute />} />
         <Route path="/notification-details" element={<NotifDetailRoute />} />
 
-        {/* Desktop teacher */}
-        <Route path="/teacher-dashboard"   element={<TeacherDashRoute />} />
-        <Route path="/classes"             element={<MyClassesRoute />} />
-        <Route path="/class-details"       element={<ClassDetailsRoute />} />
-        <Route path="/students"            element={<StudentsRoute />} />
-        <Route path="/student-profile"     element={<StudentProfileRoute />} />
-        <Route path="/attendance"          element={<AttendanceRoute />} />
-        <Route path="/teacher-assignments" element={<TeacherAssignRoute />} />
-        <Route path="/assignment-builder"  element={<AssignBuilderRoute />} />
-        <Route path="/submissions-inbox"   element={<SubmissionsRoute />} />
-        <Route path="/grading-screen"      element={<GradingRoute />} />
-        <Route path="/gradebook"           element={<GradeBookRoute />} />
-        <Route path="/analytics"           element={<AnalyticsRoute />} />
-        <Route path="/examinations"        element={<ExaminationsRoute />} />
-        <Route path="/reports"             element={<ReportsRoute />} />
-        <Route path="/ai-grading"          element={<AIGradingRoute />} />
-        <Route path="/ai-assistant"        element={<AIGradingRoute />} />
-        <Route path="/course-builder"      element={<CourseBuilderRoute />} />
-        <Route path="/lesson-upload"       element={<LessonUploadRoute />} />
-        <Route path="/question-bank"       element={<QuestionBankRoute />} />
-        <Route path="/create-assessment"   element={<CreateAssessRoute />} />
-        <Route path="/compose-announcement" element={<ComposeAnnouncRoute />} />
-        <Route path="/support"             element={<SupportRoute />} />
+        {/* ── Student ──────────────────────────────────────────────── */}
+        <Route element={<RoleRoute roles={['student']} />}>
+          <Route path="/dashboard"            element={<DashboardRoute />} />
+          <Route path="/courses"              element={<CoursesRoute />} />
+          <Route path="/assignments"          element={<AssignmentsRoute />} />
+          <Route path="/assignment-details"   element={<AssignDetailRoute />} />
+          <Route path="/analysis"             element={<AnalysisRoute />} />
+          <Route path="/calendar"             element={<CalendarRoute />} />
+          <Route path="/event-details"        element={<EventDetailsRoute />} />
+          <Route path="/messages"             element={<MessagesRoute />} />
+          <Route path="/group-chat"           element={<GroupChatRoute />} />
+          <Route path="/announcements"        element={<AnnouncementsRoute />} />
+          <Route path="/ai-tutor"             element={<AITutorRoute />} />
+          <Route path="/notifications"        element={<NotifsRoute />} />
+          <Route path="/live-classes"         element={<LiveClassesRoute />} />
+          <Route path="/downloads"            element={<DownloadsRoute />} />
+          <Route path="/student-timetable"    element={<StudentTimetableRoute />} />
+          <Route path="/attendance-analytics" element={<AttendAnalyticsRoute />} />
+          <Route path="/study-consistency"    element={<StudyConsistRoute />} />
+          <Route path="/academic-goals"       element={<AcademicGoalsRoute />} />
+          <Route path="/leaderboard"          element={<LeaderboardRoute />} />
+          <Route path="/achievements"         element={<AchievementsRoute />} />
+          <Route path="/certificates"         element={<CertificatesRoute />} />
+          <Route path="/academic-history"     element={<AcademicHistoryRoute />} />
+          <Route path="/attendance-history"   element={<AttendanceHistoryRoute />} />
+          <Route path="/subject-performance"  element={<SubjectPerfRoute />} />
+          <Route path="/deadlines"            element={<DeadlinesRoute />} />
+          <Route path="/badges-rewards"       element={<BadgesRewardsRoute />} />
+          <Route path="/lesson-notes"         element={<LessonNotesRoute />} />
+          <Route path="/my-submissions"       element={<MySubmissionsRoute />} />
+          <Route path="/exam-schedule"        element={<ExamScheduleRoute />} />
+          <Route path="/study-planner"        element={<StudyPlannerRoute />} />
+          <Route path="/discussion-forum"     element={<DiscussionForumRoute />} />
+          {/* AI Tutor pages */}
+          <Route path="/ai-chat"              element={<AIChatRoute />} />
+          <Route path="/ai-flashcards"        element={<AIFlashcardsRoute />} />
+          <Route path="/ai-study-plan"        element={<AIStudyPlanRoute />} />
+          <Route path="/ai-quiz"              element={<AIQuizRoute />} />
+          <Route path="/ai-upload"            element={<AIUploadRoute />} />
+          <Route path="/ai-saved"             element={<AISavedRoute />} />
+          <Route path="/ai-image-solver"      element={<AIImageSolverRoute />} />
+          <Route path="/ai-exam-prep"         element={<AIExamPrepRoute />} />
+          <Route path="/ai-recommendations"   element={<AIRecommendRoute />} />
+          {/* Mobile student */}
+          <Route path="/m/home"               element={<MStudentHomeRoute />} />
+          <Route path="/m/learn"              element={<MLearnRoute />} />
+          <Route path="/m/messages"           element={<MMessagesRoute />} />
+          <Route path="/m/chat-room"          element={<MChatRoomRoute />} />
+          <Route path="/m/calendar"           element={<MCalendarRoute />} />
+          <Route path="/m/lesson"             element={<LessonRoute />} />
+          <Route path="/m/quiz"               element={<QuizRoute />} />
+          <Route path="/m/quiz-result"        element={<QuizResultRoute />} />
+          <Route path="/m/lesson-complete"    element={<LessonCompleteRoute />} />
+          <Route path="/m/settings"           element={<MStudentSettingsRoute />} />
+          <Route path="/m/profile"            element={<MStudentProfileRoute />} />
+        </Route>
 
-        {/* Shared settings & utility */}
-        <Route path="/settings"            element={<SettingsRoute />} />
-        <Route path="/profile-settings"    element={<ProfileSetRoute />} />
-        <Route path="/notif-settings"      element={<NotifSetRoute />} />
-        <Route path="/security-settings"   element={<SecuritySetRoute />} />
-        <Route path="/search"              element={<SearchRoute />} />
-        <Route path="/404"                 element={<EmptyRoute />} />
+        {/* ── Student + Teacher (course content & classroom) ────────── */}
+        <Route element={<RoleRoute roles={['student', 'teacher']} />}>
+          <Route path="/course-details"       element={<CourseDetailsRoute />} />
+          <Route path="/course-resources"     element={<CourseResourcesRoute />} />
+          <Route path="/shared-files"         element={<SharedFilesRoute />} />
+          <Route path="/class-recordings"     element={<ClassRecordingsRoute />} />
+          <Route path="/pre-class-lobby"      element={<PreClassLobbyRoute />} />
+          <Route path="/live-classroom"       element={<LiveClassRoomRoute />} />
+          <Route path="/screen-share"         element={<ScreenShareRoute />} />
+          <Route path="/participants-panel"   element={<ParticipantsPanelRoute />} />
+          <Route path="/whiteboard"           element={<WhiteboardRoute />} />
+        </Route>
 
-        {/* Shared detail pages */}
-        <Route path="/assignment-details"  element={<AssignDetailRoute />} />
-        <Route path="/announcement-details" element={<AnnouncDetailRoute />} />
-        <Route path="/m/profile"           element={<MStudentProfileRoute />} />
+        {/* ── Teacher ──────────────────────────────────────────────── */}
+        <Route element={<RoleRoute roles={['teacher']} />}>
+          <Route path="/teacher-dashboard"     element={<TeacherDashRoute />} />
+          <Route path="/classes"               element={<MyClassesRoute />} />
+          <Route path="/class-details"         element={<ClassDetailsRoute />} />
+          <Route path="/students"              element={<StudentsRoute />} />
+          <Route path="/student-profile"       element={<StudentProfileRoute />} />
+          <Route path="/student-detail"        element={<StudentDetailRoute />} />
+          <Route path="/attendance"            element={<AttendanceRoute />} />
+          <Route path="/teacher-assignments"   element={<TeacherAssignRoute />} />
+          <Route path="/assignment-builder"    element={<AssignBuilderRoute />} />
+          <Route path="/submissions-inbox"     element={<SubmissionsRoute />} />
+          <Route path="/grading-screen"        element={<GradingRoute />} />
+          <Route path="/gradebook"             element={<GradeBookRoute />} />
+          <Route path="/analytics"             element={<AnalyticsRoute />} />
+          <Route path="/examinations"          element={<ExaminationsRoute />} />
+          <Route path="/reports"               element={<ReportsRoute />} />
+          <Route path="/ai-grading"            element={<AIGradingRoute />} />
+          <Route path="/ai-assistant"          element={<AIGradingRoute />} />
+          <Route path="/course-builder"        element={<CourseBuilderRoute />} />
+          <Route path="/lesson-upload"         element={<LessonUploadRoute />} />
+          <Route path="/course-settings"       element={<CourseSettingsRoute />} />
+          <Route path="/question-bank"         element={<QuestionBankRoute />} />
+          <Route path="/create-assessment"     element={<CreateAssessRoute />} />
+          <Route path="/compose-announcement"  element={<ComposeAnnouncRoute />} />
+          <Route path="/support"               element={<SupportRoute />} />
+          <Route path="/behavior-analytics"    element={<BehaviorAnalyticsRoute />} />
+          <Route path="/class-performance"     element={<ClassPerfRoute />} />
+          <Route path="/teacher-live-classes"  element={<TeacherLiveRoute />} />
+          <Route path="/schedule-class"        element={<ScheduleClassRoute />} />
+          <Route path="/inclass-attendance"    element={<InClassAttRoute />} />
+          <Route path="/teacher-calendar"      element={<TeacherCalRoute />} />
+          <Route path="/resources"             element={<TeacherResourcesRoute />} />
+          <Route path="/teacher-messages"      element={<TeacherMsgsRoute />} />
+          <Route path="/teacher-announcements" element={<TeacherAnnouncRoute />} />
+          <Route path="/teacher-settings"      element={<TeacherSettingsRoute />} />
+          <Route path="/teacher-support"       element={<TeacherSupportRoute />} />
+          <Route path="/lesson-planner"        element={<LessonPlannerRoute />} />
+          <Route path="/teacher-analytics"     element={<TeacherAnalyticsRoute />} />
+          <Route path="/quiz-builder"          element={<QuizBuilderRoute />} />
+          <Route path="/bulk-grade"            element={<BulkGradeRoute />} />
+          <Route path="/plagiarism-check"      element={<PlagiarismRoute />} />
+        </Route>
 
-        {/* Phase 6: Live Classes */}
-        <Route path="/live-classes"        element={<LiveClassesRoute />} />
-        <Route path="/pre-class-lobby"     element={<PreClassLobbyRoute />} />
-        <Route path="/live-classroom"      element={<LiveClassRoomRoute />} />
-        <Route path="/class-recordings"    element={<ClassRecordingsRoute />} />
-        <Route path="/schedule-class"      element={<ScheduleClassRoute />} />
-        <Route path="/inclass-attendance"  element={<InClassAttRoute />} />
+        {/* ── Parent ───────────────────────────────────────────────── */}
+        <Route element={<RoleRoute roles={['parent']} />}>
+          <Route path="/parent/home"             element={<ParentHomeRoute />} />
+          <Route path="/parent/progress"         element={<ParentProgressRoute />} />
+          <Route path="/parent/calendar"         element={<ParentCalRoute />} />
+          <Route path="/parent/chat"             element={<ParentChatRoute />} />
+          <Route path="/parent/chat-room"        element={<ParentChatRoomRoute />} />
+          <Route path="/parent/notifications"    element={<ParentNotifsRoute />} />
+          <Route path="/parent/profile"          element={<ParentProfileRoute />} />
+          <Route path="/parent/fees"             element={<SchoolFeesRoute />} />
+          <Route path="/parent/payment-method"   element={<PayMethodRoute />} />
+          <Route path="/parent/payment"          element={<MakePayRoute />} />
+          <Route path="/parent/payment-review"   element={<PayReviewRoute />} />
+          <Route path="/parent/payment-success"  element={<PaySuccessRoute />} />
+          <Route path="/parent/attendance"       element={<ChildAttRoute />} />
+          <Route path="/parent/report-cards"     element={<ReportCardsRoute />} />
+          <Route path="/parent/message-teacher"  element={<ParentMsgTeacherRoute />} />
+          <Route path="/parent/timetable"        element={<ChildTimetableRoute />} />
+          <Route path="/parent/permission-slips" element={<PermissionSlipsRoute />} />
+          <Route path="/parent/announcements"    element={<ParentAnnouncRoute />} />
+        </Route>
 
-        {/* Phase 6: AI Tutor */}
-        <Route path="/ai-chat"             element={<AIChatRoute />} />
-        <Route path="/ai-flashcards"       element={<AIFlashcardsRoute />} />
-        <Route path="/ai-study-plan"       element={<AIStudyPlanRoute />} />
-        <Route path="/ai-quiz"             element={<AIQuizRoute />} />
-        <Route path="/ai-upload"           element={<AIUploadRoute />} />
-        <Route path="/ai-saved"            element={<AISavedRoute />} />
-        <Route path="/ai-image-solver"     element={<AIImageSolverRoute />} />
-        <Route path="/ai-exam-prep"        element={<AIExamPrepRoute />} />
-        <Route path="/ai-recommendations"  element={<AIRecommendRoute />} />
-
-        {/* Phase 6: Analytics / Student */}
-        <Route path="/attendance-analytics" element={<AttendAnalyticsRoute />} />
-        <Route path="/study-consistency"   element={<StudyConsistRoute />} />
-        <Route path="/academic-goals"      element={<AcademicGoalsRoute />} />
-        <Route path="/leaderboard"         element={<LeaderboardRoute />} />
-        <Route path="/achievements"        element={<AchievementsRoute />} />
-        <Route path="/certificates"        element={<CertificatesRoute />} />
-        <Route path="/academic-history"    element={<AcademicHistoryRoute />} />
-        <Route path="/downloads"           element={<DownloadsRoute />} />
-
-        {/* Phase 6: Teacher */}
-        <Route path="/behavior-analytics"  element={<BehaviorAnalyticsRoute />} />
-        <Route path="/class-performance"   element={<ClassPerfRoute />} />
-        <Route path="/teacher-live-classes"  element={<TeacherLiveRoute />} />
-        <Route path="/teacher-calendar"      element={<TeacherCalRoute />} />
-        <Route path="/resources"             element={<TeacherResourcesRoute />} />
-        <Route path="/teacher-messages"      element={<TeacherMsgsRoute />} />
-        <Route path="/teacher-announcements" element={<TeacherAnnouncRoute />} />
-        <Route path="/teacher-settings"      element={<TeacherSettingsRoute />} />
-        <Route path="/teacher-support"       element={<TeacherSupportRoute />} />
-
-        {/* Checklist additions */}
-        <Route path="/lesson-notes"        element={<LessonNotesRoute />} />
-        <Route path="/my-submissions"      element={<MySubmissionsRoute />} />
-        <Route path="/student-detail"      element={<StudentDetailRoute />} />
-        <Route path="/exam-schedule"       element={<ExamScheduleRoute />} />
-        <Route path="/study-planner"       element={<StudyPlannerRoute />} />
-        <Route path="/lesson-planner"      element={<LessonPlannerRoute />} />
-        <Route path="/teacher-analytics"   element={<TeacherAnalyticsRoute />} />
-        <Route path="/school-settings"     element={<SchoolSettingsRoute />} />
-        <Route path="/integrations"        element={<IntegrationsRoute />} />
-        <Route path="/appearance-settings" element={<AppearanceRoute />} />
-        <Route path="/discussion-forum"    element={<DiscussionForumRoute />} />
-        <Route path="/quiz-builder"        element={<QuizBuilderRoute />} />
-        <Route path="/student-timetable"   element={<StudentTimetableRoute />} />
-        <Route path="/report-builder"      element={<ReportBuilderRoute />} />
-        <Route path="/bulk-grade"          element={<BulkGradeRoute />} />
-
-        {/* Round 3: new pages */}
-        <Route path="/connected-devices"   element={<ConnectedDevicesRoute />} />
-        <Route path="/privacy-settings"    element={<PrivacySettingsRoute />} />
-        <Route path="/linked-accounts"     element={<LinkedAccountsRoute />} />
-        <Route path="/attendance-history"  element={<AttendanceHistoryRoute />} />
-        <Route path="/subject-performance" element={<SubjectPerfRoute />} />
-        <Route path="/deadlines"           element={<DeadlinesRoute />} />
-        <Route path="/shared-files"        element={<SharedFilesRoute />} />
-        <Route path="/course-resources"    element={<CourseResourcesRoute />} />
-        <Route path="/course-settings"     element={<CourseSettingsRoute />} />
-        <Route path="/plagiarism-check"    element={<PlagiarismRoute />} />
-        <Route path="/2fa-setup"           element={<TwoFARoute />} />
-        <Route path="/add-event"           element={<AddEventRoute />} />
-        <Route path="/storage-management"  element={<StorageMgmtRoute />} />
-        <Route path="/badges-rewards"      element={<BadgesRewardsRoute />} />
-        <Route path="/offline-sync"        element={<OfflineSyncRoute />} />
-        <Route path="/whiteboard"          element={<WhiteboardRoute />} />
-        <Route path="/screen-share"        element={<ScreenShareRoute />} />
-        <Route path="/participants-panel"  element={<ParticipantsPanelRoute />} />
-
-        {/* Mobile student */}
-        <Route path="/m/home"              element={<MStudentHomeRoute />} />
-        <Route path="/m/learn"             element={<MLearnRoute />} />
-        <Route path="/m/messages"          element={<MMessagesRoute />} />
-        <Route path="/m/chat-room"         element={<MChatRoomRoute />} />
-        <Route path="/m/calendar"          element={<MCalendarRoute />} />
-        <Route path="/m/lesson"            element={<LessonRoute />} />
-        <Route path="/m/quiz"              element={<QuizRoute />} />
-        <Route path="/m/quiz-result"       element={<QuizResultRoute />} />
-        <Route path="/m/lesson-complete"   element={<LessonCompleteRoute />} />
-        <Route path="/m/settings"          element={<MStudentSettingsRoute />} />
-
-        {/* Parent */}
-        <Route path="/parent/home"         element={<ParentHomeRoute />} />
-        <Route path="/parent/progress"     element={<ParentProgressRoute />} />
-        <Route path="/parent/calendar"     element={<ParentCalRoute />} />
-        <Route path="/parent/chat"         element={<ParentChatRoute />} />
-        <Route path="/parent/chat-room"    element={<ParentChatRoomRoute />} />
-        <Route path="/parent/notifications" element={<ParentNotifsRoute />} />
-        <Route path="/parent/profile"      element={<ParentProfileRoute />} />
-        <Route path="/parent/fees"         element={<SchoolFeesRoute />} />
-        <Route path="/parent/payment-method" element={<PayMethodRoute />} />
-        <Route path="/parent/payment"      element={<MakePayRoute />} />
-        <Route path="/parent/payment-review" element={<PayReviewRoute />} />
-        <Route path="/parent/payment-success" element={<PaySuccessRoute />} />
-        <Route path="/parent/attendance"       element={<ChildAttRoute />} />
-        <Route path="/parent/report-cards"     element={<ReportCardsRoute />} />
-        <Route path="/parent/message-teacher"  element={<ParentMsgTeacherRoute />} />
-        <Route path="/parent/timetable"        element={<ChildTimetableRoute />} />
-        <Route path="/parent/permission-slips" element={<PermissionSlipsRoute />} />
-        <Route path="/parent/announcements"    element={<ParentAnnouncRoute />} />
-
-        {/* Admin routes — role guard */}
+        {/* ── Admin ────────────────────────────────────────────────── */}
         <Route element={<RoleRoute roles={['admin']} />}>
           <Route path="/admin-dashboard"     element={<AdminDashRoute />} />
           <Route path="/user-management"     element={<UserMgmtRoute />} />
@@ -671,12 +675,19 @@ export default function App() {
           <Route path="/timetable"           element={<TimetableMgmtRoute />} />
           <Route path="/bulk-import"         element={<BulkStudentImportRoute />} />
           <Route path="/term-calendar"       element={<TermCalendarRoute />} />
-          <Route path="/audit-logs"          element={<AuditLogsRoute />} />
           <Route path="/roles-permissions"   element={<RolesPermRoute />} />
           <Route path="/payment-integration" element={<PayIntegrationRoute />} />
+          <Route path="/report-builder"      element={<ReportBuilderRoute />} />
+          <Route path="/school-settings"     element={<SchoolSettingsRoute />} />
+          <Route path="/integrations"        element={<IntegrationsRoute />} />
         </Route>
 
-        {/* Super Admin routes — role guard */}
+        {/* ── Admin + Super Admin shared ────────────────────────────── */}
+        <Route element={<RoleRoute roles={['admin', 'super_admin']} />}>
+          <Route path="/audit-logs"          element={<AuditLogsRoute />} />
+        </Route>
+
+        {/* ── Super Admin ──────────────────────────────────────────── */}
         <Route element={<RoleRoute roles={['super_admin']} />}>
           <Route path="/super-dashboard"     element={<SuperDashRoute />} />
           <Route path="/schools-list"        element={<SchoolsListRoute />} />
@@ -695,9 +706,8 @@ export default function App() {
 
       </Route>{/* end ProtectedRoute */}
 
-      {/* Redirects */}
-      <Route path="/logout"              element={<Navigate to="/login" replace />} />
-      <Route path="*"                    element={<Navigate to="/404"   replace />} />
+      <Route path="/logout" element={<Navigate to="/login" replace />} />
+      <Route path="*"       element={<Navigate to="/404"   replace />} />
     </Routes>
   )
 }
