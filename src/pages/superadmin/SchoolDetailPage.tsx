@@ -901,7 +901,7 @@ export default function SchoolDetailPage({ onNavigate }: Props) {
               <h2 className="text-base font-bold text-foreground">Change Plan</h2>
               <button onClick={() => setShowChangePlan(false)} className="text-muted hover:text-foreground"><X size={18} /></button>
             </div>
-            <p className="text-xs text-muted mb-4">Current plan: <strong>{school.plan}</strong>. Select a new plan for {school.name}.</p>
+            <p className="text-xs text-muted mb-4">Current plan: <strong>{school.plan}</strong>. Select a new plan for {displayName}.</p>
             <div className="flex flex-col gap-2 mb-5">
               {[
                 { id: 'Starter',    desc: '₦850–950/student/term · Core LMS, Attendance, Parent Portal'                          },
@@ -983,7 +983,7 @@ export default function SchoolDetailPage({ onNavigate }: Props) {
               <h2 className="text-base font-bold text-foreground">Extend Trial</h2>
               <button onClick={() => setShowExtendTrial(false)} className="text-muted hover:text-foreground"><X size={18} /></button>
             </div>
-            <p className="text-xs text-muted mb-4">{school.name} is currently on the <strong>{school.plan}</strong> plan. Select how many additional days to add to their trial period.</p>
+            <p className="text-xs text-muted mb-4">{displayName} is currently on the <strong>{school.plan}</strong> plan. Select how many additional days to add to their trial period.</p>
             <div className="grid grid-cols-2 gap-2 mb-5">
               {['7', '14', '30', '60'].map(d => (
                 <button key={d} onClick={() => setTrialDays(d)}
@@ -1123,7 +1123,7 @@ export default function SchoolDetailPage({ onNavigate }: Props) {
               <h2 className="text-base font-bold text-red-600">Suspend School?</h2>
               <button onClick={() => setShowSuspend(false)} className="text-muted hover:text-foreground"><X size={18} /></button>
             </div>
-            <p className="text-sm text-muted mb-5">This will immediately block all logins for <strong>{school.name}</strong> — students, teachers, parents and admins. This action is audit-logged and reversible.</p>
+            <p className="text-sm text-muted mb-5">This will immediately block all logins for <strong>{displayName}</strong> — students, teachers, parents and admins. This action is audit-logged and reversible.</p>
             <div className="flex gap-3">
               <button onClick={() => setShowSuspend(false)} className="flex-1 h-11 border border-black/15 text-sm font-semibold rounded-pill hover:border-primary hover:text-primary transition-colors">Cancel</button>
               <button onClick={() => { setShowSuspend(false); flash('School suspended. All logins blocked.') }}
@@ -1147,17 +1147,17 @@ export default function SchoolDetailPage({ onNavigate }: Props) {
               <AlertCircle size={14} className="shrink-0 mt-0.5" />
               <p>This action is <strong>permanent and irreversible</strong>. All school data — students, teachers, courses, grades, reports, and payments — will be permanently deleted.</p>
             </div>
-            <p className="text-sm text-foreground mb-3">Type <strong>{school.name}</strong> to confirm deletion:</p>
+            <p className="text-sm text-foreground mb-3">Type <strong>{displayName}</strong> to confirm deletion:</p>
             <input
               type="text" value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)}
-              placeholder={school.name}
+              placeholder={displayName}
               className="w-full h-10 px-3 border border-red-200 rounded-input text-sm outline-none focus:border-red-500 mb-5"
             />
             <div className="flex gap-3">
               <button onClick={() => { setShowDeleteSchool(false); setDeleteConfirm('') }} className="flex-1 h-11 border border-black/15 text-sm font-semibold rounded-pill hover:border-primary hover:text-primary transition-colors">Cancel</button>
               <button
                 onClick={() => { setShowDeleteSchool(false); setDeleteConfirm(''); flash('School permanently deleted.') }}
-                disabled={deleteConfirm !== school.name}
+                disabled={deleteConfirm !== displayName}
                 className="flex-1 h-11 bg-red-500 text-white text-sm font-semibold rounded-pill hover:bg-red-600 transition-colors disabled:opacity-40">
                 Delete Permanently
               </button>

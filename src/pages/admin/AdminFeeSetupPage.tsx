@@ -65,13 +65,14 @@ export default function AdminFeeSetupPage({ onNavigate }: Props) {
   async function loadSettings() {
     const { data } = await supabase
       .from('school_settings')
-      .select('bank_name, account_number, account_name, paystack_public_key, paystack_secret_key, paystack_subaccount_code')
+      .select('bank_name, account_number, account_name, bank_account_number, bank_account_name, paystack_public_key, paystack_secret_key, paystack_subaccount_code')
       .eq('school_id', profile!.school_id!)
       .maybeSingle()
     if (data) {
       setBankName(data.bank_name ?? '')
-      setAcctNumber(data.account_number ?? '')
-      setAcctName(data.account_name ?? '')
+      // Prefer the new columns (used by offline payment flow); fall back to legacy columns
+      setAcctNumber((data.bank_account_number ?? data.account_number) ?? '')
+      setAcctName((data.bank_account_name ?? data.account_name) ?? '')
       setPubKey(data.paystack_public_key ?? '')
       setSecKey(data.paystack_secret_key ?? '')
       setSubAcctId(data.paystack_subaccount_code ?? '')
@@ -131,7 +132,15 @@ export default function AdminFeeSetupPage({ onNavigate }: Props) {
     const { error } = await supabase
       .from('school_settings')
       .upsert(
-        { school_id: profile.school_id, bank_name: bankName, account_number: acctNumber, account_name: acctName },
+        {
+          school_id:           profile.school_id,
+          bank_name:           bankName,
+          account_name:        acctName,
+          account_number:      acctNumber,
+          // Also write new columns used by the offline payment page
+          bank_account_name:   acctName,
+          bank_account_number: acctNumber,
+        },
         { onConflict: 'school_id' }
       )
     logSupabaseError('AdminFeeSetup.saveBank', error)

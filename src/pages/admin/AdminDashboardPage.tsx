@@ -16,9 +16,11 @@ const ONBOARDING_STEPS = [
 ]
 
 interface Stats {
-  students: number
-  teachers: number
-  classes: number
+  students:       number
+  teachers:       number
+  classes:        number
+  attendanceRate: number | null
+  outstandingFees: number
 }
 
 interface RecentUser {
@@ -44,7 +46,8 @@ export default function AdminDashboardPage({ onNavigate }: Props) {
 
   async function loadDashboard() {
     setLoading(true)
-    const [studRes, teachRes, clsRes, recentRes] = await Promise.all([
+    const today = new Date().toISOString().split('T')[0]
+    const [studRes, teachRes, clsRes, recentRes, attRes, feeRes] = await Promise.all([
       supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('school_id', schoolId!).eq('role', 'student'),
       supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('school_id', schoolId!).eq('role', 'teacher'),
       supabase.from('classes').select('id', { count: 'exact', head: true }).eq('school_id', schoolId!),
@@ -54,16 +57,29 @@ export default function AdminDashboardPage({ onNavigate }: Props) {
         .in('role', ['student', 'teacher', 'parent'])
         .order('created_at', { ascending: false })
         .limit(5),
+      supabase.from('attendance_records').select('status').eq('school_id', schoolId!).eq('date', today),
+      supabase.from('invoices').select('amount, paid_amount').eq('school_id', schoolId!),
     ])
 
+    const attRows = (attRes.data ?? []) as { status: string }[]
+    const attendanceRate = attRows.length > 0
+      ? Math.round((attRows.filter(r => r.status === 'present').length / attRows.length) * 100)
+      : null
+
+    const feeInvoices = (feeRes.data ?? []) as { amount: number; paid_amount: number | null }[]
+    const outstandingFees = feeInvoices.reduce(
+      (s, r) => s + Math.max(0, (r.amount ?? 0) - (r.paid_amount ?? 0)), 0
+    )
+
     setStats({
-      students: studRes.count  ?? 0,
-      teachers: teachRes.count ?? 0,
-      classes:  clsRes.count   ?? 0,
+      students:        studRes.count  ?? 0,
+      teachers:        teachRes.count ?? 0,
+      classes:         clsRes.count   ?? 0,
+      attendanceRate,
+      outstandingFees,
     })
     setRecentUsers((recentRes.data as unknown as RecentUser[]) ?? [])
 
-    // Mark checklist steps that are done
     const completedSteps = new Set<string>(['registered'])
     if ((teachRes.count ?? 0) > 0) completedSteps.add('teachers')
     if ((clsRes.count ?? 0) > 0)   completedSteps.add('classes')
@@ -149,7 +165,7 @@ export default function AdminDashboardPage({ onNavigate }: Props) {
             { label: 'Total Students', value: loading ? '—' : String(stats?.students ?? 0),  color: 'text-primary',    bg: 'bg-primary/10'    },
             { label: 'Total Teachers', value: loading ? '—' : String(stats?.teachers ?? 0),  color: 'text-teal-600',   bg: 'bg-teal-50'       },
             { label: 'Active Classes', value: loading ? '—' : String(stats?.classes ?? 0),   color: 'text-foreground', bg: 'bg-canvas'        },
-            { label: 'Attendance Rate', value: '—',                                           color: 'text-green-600',  bg: 'bg-green-50'      },
+            { label: 'Attendance Rate', value: loading ? '—' : (stats?.attendanceRate != null ? `${stats.attendanceRate}%` : 'No data'), color: 'text-green-600', bg: 'bg-green-50' },
           ].map(s => (
             <div key={s.label} className="bg-surface rounded-card shadow-sm p-5">
               <p className={`text-3xl font-bold ${s.color}`}>{s.value}</p>
@@ -252,7 +268,7 @@ export default function AdminDashboardPage({ onNavigate }: Props) {
                   { label: 'Classes',  value: loading ? '—' : `${stats?.classes ?? 0} active`,   page: 'classes-management' },
                   { label: 'Students', value: loading ? '—' : `${stats?.students ?? 0} enrolled`,  page: 'user-management'   },
                   { label: 'Teachers', value: loading ? '—' : `${stats?.teachers ?? 0} on staff`, page: 'user-management'   },
-                  { label: 'Finance',  value: '—',                                                 page: 'finance'            },
+                  { label: 'Finance',  value: loading ? '—' : (stats ? (stats.outstandingFees > 0 ? `₦${Math.round(stats.outstandingFees).toLocaleString('en-NG')} owed` : 'All fees paid') : '—'), page: 'finance' },
                 ].map(m => (
                   <button key={m.label} onClick={() => onNavigate(m.page)}
                     className="flex items-center justify-between p-3 rounded-card bg-canvas hover:bg-primary/8 transition-colors text-left">

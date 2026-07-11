@@ -1,17 +1,18 @@
-import { useState } from 'react'
-import { ChevronRight, Eye, EyeOff, CheckCircle2, Copy, Building2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { ChevronRight, Eye, EyeOff, CheckCircle2, Copy, Building2, CreditCard, Landmark, AlertCircle, Loader2 } from 'lucide-react'
 import AuthHeroPanel from '../components/auth/AuthHeroPanel'
 import { supabase } from '../lib/supabase'
 import { generateSchoolCode } from '../lib/auth'
 import { logSupabaseError } from '../lib/supabaseError'
 
 type Props = { onNavigate: (page: string) => void }
-type Step = 'school' | 'admin' | 'done'
+type Step = 'school' | 'admin' | 'payment' | 'done'
 
 const steps: { key: Step; label: string }[] = [
-  { key: 'school', label: 'School Info' },
-  { key: 'admin',  label: 'Admin Setup' },
-  { key: 'done',   label: 'All Set'     },
+  { key: 'school',  label: 'School Info'  },
+  { key: 'admin',   label: 'Admin Setup'  },
+  { key: 'payment', label: 'Payment'      },
+  { key: 'done',    label: 'All Set'      },
 ]
 
 const nigerianStates = [
@@ -44,10 +45,26 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
   const [password,   setPassword]   = useState('')
   const [confirmPw,  setConfirmPw]  = useState('')
 
+  // Payment
+  const [payMethod,    setPayMethod]    = useState<'paystack' | 'bank_transfer'>('paystack')
+  const [platformBank, setPlatformBank] = useState({ bankName: '', acctName: '', acctNumber: '' })
+
   // Stored after successful registration
   const [schoolCode, setSchoolCode] = useState('')
 
   const stepIndex = steps.findIndex(s => s.key === step)
+
+  useEffect(() => {
+    if (step === 'payment') {
+      supabase.from('platform_config')
+        .select('bank_name, bank_account_name, bank_account_number')
+        .maybeSingle()
+        .then(({ data }) => {
+          const d = data as { bank_name: string | null; bank_account_name: string | null; bank_account_number: string | null } | null
+          if (d) setPlatformBank({ bankName: d.bank_name ?? '', acctName: d.bank_account_name ?? '', acctNumber: d.bank_account_number ?? '' })
+        })
+    }
+  }, [step])
 
   function copyCode() {
     navigator.clipboard.writeText(schoolCode).catch(() => {})
@@ -55,19 +72,16 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  async function handleRegister(e: React.FormEvent) {
+  function handleAdminNext(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    if (password !== confirmPw) { setError('Passwords do not match.'); return }
+    if (password.length < 8)    { setError('Password must be at least 8 characters.'); return }
+    setStep('payment')
+  }
 
-    if (password !== confirmPw) {
-      setError('Passwords do not match.')
-      return
-    }
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.')
-      return
-    }
-
+  async function handleRegister() {
+    setError('')
     setLoading(true)
     try {
       // 1. Create auth user
@@ -90,13 +104,15 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
       const { error: schoolError } = await supabase
         .from('schools')
         .insert({
-          id:      schoolId,
-          name:    schoolName,
+          id:                           schoolId,
+          name:                         schoolName,
           code,
-          email:   schoolEmail,
-          phone:   schoolPhone,
-          address: schoolAddress,
-          state:   schoolState,
+          email:                        schoolEmail,
+          phone:                        schoolPhone,
+          address:                      schoolAddress,
+          state:                        schoolState,
+          subscription_status:          payMethod === 'bank_transfer' ? 'pending_payment' : 'active',
+          subscription_payment_method:  payMethod,
         })
 
       if (schoolError) throw schoolError
@@ -191,7 +207,9 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
                       </div>
                       <span className="text-xs font-semibold hidden sm:block">{s.label}</span>
                     </div>
-                    {i < 1 && <div className={`flex-1 h-0.5 rounded-full ${past ? 'bg-primary' : 'bg-black/10'}`} />}
+                    {i < steps.filter(s => s.key !== 'done').length - 1 && (
+                <div className={`flex-1 h-0.5 rounded-full ${past ? 'bg-primary' : 'bg-black/10'}`} />
+              )}
                   </div>
                 )
               })}
@@ -281,7 +299,7 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
             <>
               <div className="mb-6">
                 <h1 className="text-2xl font-semibold text-foreground leading-tight mb-1">Admin Account</h1>
-                <p className="text-sm text-muted">Step 2 of 2 — Primary administrator for {schoolName || 'your school'}.</p>
+                <p className="text-sm text-muted">Step 2 of 3 — Primary administrator for {schoolName || 'your school'}.</p>
               </div>
 
               {error && (
@@ -290,7 +308,7 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
                 </div>
               )}
 
-              <form className="flex flex-col gap-4" onSubmit={handleRegister}>
+              <form className="flex flex-col gap-4" onSubmit={handleAdminNext}>
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-bold text-foreground">Full Name <span className="text-red-500">*</span></label>
                   <input
@@ -358,17 +376,98 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
                   </button>
                   <button
                     type="submit"
-                    disabled={loading}
-                    className="flex-1 h-12 bg-primary text-white text-sm font-bold rounded-pill hover:bg-primary-deep transition-colors shadow-primary flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="flex-1 h-12 bg-primary text-white text-sm font-bold rounded-pill hover:bg-primary-deep transition-colors shadow-primary flex items-center justify-center gap-2"
                   >
-                    {loading ? 'Registering…' : <><span>Register School</span><ChevronRight size={15} /></>}
+                    <span>Continue</span><ChevronRight size={15} />
                   </button>
                 </div>
               </form>
             </>
           )}
 
-          {/* ── Step 3: Done ── */}
+          {/* ── Step 3: Payment ── */}
+          {step === 'payment' && (
+            <>
+              <div className="mb-6">
+                <h1 className="text-2xl font-semibold text-foreground leading-tight mb-1">Subscription Payment</h1>
+                <p className="text-sm text-muted">Step 3 of 3 — Choose how you'll pay the platform subscription.</p>
+              </div>
+
+              {error && (
+                <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>
+              )}
+
+              <div className="flex flex-col gap-3 mb-6">
+                {[
+                  { id: 'paystack'      as const, icon: CreditCard, label: 'Online (Paystack)',       sub: 'Your school is activated immediately after signup.'         },
+                  { id: 'bank_transfer' as const, icon: Landmark,   label: 'Bank Transfer (Offline)', sub: 'Transfer to Learnora. Activated after payment is confirmed.' },
+                ].map(m => (
+                  <button key={m.id} onClick={() => setPayMethod(m.id)}
+                    className={`flex items-center gap-4 p-4 rounded-card border-2 text-left transition-colors ${payMethod === m.id ? 'border-primary bg-primary/5' : 'border-black/10 hover:border-primary/30'}`}>
+                    <div className={`size-10 rounded-full flex items-center justify-center shrink-0 ${payMethod === m.id ? 'bg-primary text-white' : 'bg-canvas text-muted'}`}>
+                      <m.icon size={18} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-foreground">{m.label}</p>
+                      <p className="text-xs text-muted mt-0.5">{m.sub}</p>
+                    </div>
+                    <div className={`size-5 rounded-full border-2 shrink-0 flex items-center justify-center ${payMethod === m.id ? 'border-primary bg-primary' : 'border-black/20'}`}>
+                      {payMethod === m.id && <div className="size-2 bg-white rounded-full" />}
+                    </div>
+                  </button>
+                ))}
+
+                {payMethod === 'bank_transfer' && (
+                  <div className="bg-canvas border border-black/10 rounded-card p-4 flex flex-col gap-2 mt-1">
+                    <p className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Transfer to Learnora</p>
+                    {platformBank.acctNumber ? (
+                      <>
+                        {[
+                          { label: 'Bank',           value: platformBank.bankName   || '—' },
+                          { label: 'Account Name',   value: platformBank.acctName   || '—' },
+                          { label: 'Account Number', value: platformBank.acctNumber        },
+                        ].map(r => (
+                          <div key={r.label} className="flex justify-between text-sm">
+                            <span className="text-muted">{r.label}</span>
+                            <span className={`font-bold text-foreground ${r.label === 'Account Number' ? 'font-mono tracking-widest' : ''}`}>{r.value}</span>
+                          </div>
+                        ))}
+                        <p className="text-[11px] text-muted mt-1">Use your school name as the transfer reference. Your account will be activated after Learnora confirms receipt.</p>
+                      </>
+                    ) : (
+                      <div className="flex items-start gap-2">
+                        <AlertCircle size={13} className="text-amber-500 shrink-0 mt-0.5" />
+                        <p className="text-xs text-amber-700">Bank details not available. Contact Learnora support for payment instructions.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setStep('admin'); setError('') }}
+                  className="h-12 px-5 border border-black/20 text-foreground text-sm font-semibold rounded-pill hover:border-primary hover:text-primary transition-colors"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRegister}
+                  disabled={loading}
+                  className="flex-1 h-12 bg-primary text-white text-sm font-bold rounded-pill hover:bg-primary-deep transition-colors shadow-primary flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {loading
+                    ? <><Loader2 size={15} className="animate-spin" /> Registering…</>
+                    : payMethod === 'bank_transfer' ? 'Register School' : 'Register School'
+                  }
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ── Step 4: Done ── */}
           {step === 'done' && (
             <div className="text-center">
               <div className="size-16 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-6">
@@ -376,9 +475,17 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
               </div>
 
               <h1 className="text-3xl font-semibold text-foreground mb-2">You're registered!</h1>
-              <p className="text-sm text-muted mb-8 max-w-[380px] mx-auto">
+              <p className="text-sm text-muted mb-4 max-w-[380px] mx-auto">
                 <strong>{schoolName}</strong> has been created. Check your inbox at <strong>{adminEmail}</strong> to confirm your email, then log in.
               </p>
+              {payMethod === 'bank_transfer' && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-card px-4 py-3 mb-6 text-left">
+                  <AlertCircle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    Your account is <strong>pending activation</strong>. Learnora will activate your school once your bank transfer is confirmed. You can still log in and explore the platform.
+                  </p>
+                </div>
+              )}
 
               {/* School code box */}
               <div className="bg-canvas rounded-card border border-black/10 p-5 mb-6 text-left">

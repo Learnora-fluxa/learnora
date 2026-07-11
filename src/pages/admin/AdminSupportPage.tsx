@@ -1,132 +1,306 @@
-﻿import { useState } from 'react'
-import { HelpCircle, MessageSquare, FileText, ChevronRight, Send, CheckCircle2, Search } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import {
+  HelpCircle, Plus, ChevronDown, ChevronUp, Loader2,
+  CheckCircle2, Clock, AlertCircle, MessageSquare, X,
+} from 'lucide-react'
 import DashboardLayout from '../../components/layout/DashboardLayout'
 import { adminNav } from '../../components/layout/Sidebar'
 import { useAuth, profileToSidebarUser } from '../../contexts/AuthContext'
+import { supabase } from '../../lib/supabase'
+import { logSupabaseError } from '../../lib/supabaseError'
 
-type Props = { onNavigate: (page: string) => void }
-type Tab = 'faq' | 'messages' | 'contact'
-type Thread = 'superadmin' | 'teachers' | null
+type Props  = { onNavigate: (page: string) => void }
+type Tab    = 'tickets' | 'faq'
+type Status = 'open' | 'in_progress' | 'resolved' | 'closed'
+type Prio   = 'low' | 'medium' | 'high'
 
-const faqs = [
-  { q: 'How do I add a new student or teacher?',              a: 'Go to Users in the sidebar. Click "Add User", fill in the details and choose the credential delivery method. The user will receive their login info by email or SMS.' },
-  { q: 'How do I create a new class?',                        a: 'Go to Classes in the sidebar, then click "New Class". Select the level, arm, form teacher, and subjects, then submit.' },
-  { q: 'How do I send an announcement to the whole school?',  a: 'Open Announcements in the sidebar. Click "New Announcement", set the audience to "Whole School", compose your message, and post.' },
-  { q: 'How do I view attendance across classes?',            a: 'Open Attendance in the sidebar. The By Class tab shows all classes with present/absent/late counts and attendance rates.' },
-  { q: 'How do I manage the school subscription?',            a: 'Go to Subscription in the sidebar to view your current plan, billing history, and upgrade options.' },
-  { q: 'How do I approve teacher-uploaded resources?',        a: 'When a teacher submits a resource, it appears in a pending state. Go to Resources or check the notification — you can approve or reject from there.' },
-]
-
-type Message = { from: 'me' | 'them'; text: string; time: string }
-
-const superAdminThread: Message[] = [
-  { from: 'them', text: 'Your school trial period ends in 14 days. Please review your subscription options.', time: '2d ago' },
-  { from: 'me',   text: "Thanks, I'll check the subscription page and get back to you.",                      time: '2d ago' },
-  { from: 'them', text: 'Sure. Let me know if you have any questions about the Pro plan.',                    time: '1d ago' },
-]
-
-const teacherThreads = [
-  { id: 't1', name: 'Mrs Nnduka Kisha',  initials: 'NK', subject: 'Mathematics', preview: 'Can we adjust the exam schedule for SS2A?', time: '1h ago',  unread: true  },
-  { id: 't2', name: 'Mr Daniel Johnson', initials: 'DJ', subject: 'Physics',     preview: 'Submitted two resources for approval.',     time: '3h ago',  unread: true  },
-  { id: 't3', name: 'Mrs Gloria Ewa',    initials: 'GE', subject: 'English',     preview: 'Attendance report for last week is ready.',  time: 'Yesterday', unread: false },
-]
-
-const teacherMessages: Record<string, Message[]> = {
-  t1: [
-    { from: 'them', text: 'Good morning Admin. Can we adjust the exam schedule for SS2A? Two students have a clash.', time: '1h ago' },
-  ],
-  t2: [
-    { from: 'them', text: 'I just submitted two resources for library approval — Introduction to Calculus and Physics Lab Guide.', time: '3h ago' },
-    { from: 'me',   text: "Got them. I'll review by end of day.",                                                                  time: '3h ago' },
-  ],
-  t3: [
-    { from: 'them', text: "The weekly attendance report for SS1B is ready. Average attendance was 91%.",    time: 'Yesterday' },
-    { from: 'me',   text: 'Great, thanks for the update.',                                                  time: 'Yesterday' },
-  ],
+interface Ticket {
+  id:         string
+  subject:    string
+  body:       string | null
+  status:     Status
+  priority:   Prio
+  created_at: string
+  updated_at: string
 }
+
+const STATUS_CFG: Record<Status, { label: string; color: string; icon: React.ElementType }> = {
+  open:        { label: 'Open',        color: 'bg-blue-50  text-blue-700',   icon: MessageSquare },
+  in_progress: { label: 'In Progress', color: 'bg-amber-50 text-amber-700',  icon: Clock         },
+  resolved:    { label: 'Resolved',    color: 'bg-green-50 text-green-700',  icon: CheckCircle2  },
+  closed:      { label: 'Closed',      color: 'bg-canvas   text-muted',      icon: X             },
+}
+
+const PRIO_CFG: Record<Prio, { label: string; color: string }> = {
+  low:    { label: 'Low',    color: 'text-muted' },
+  medium: { label: 'Medium', color: 'text-amber-600' },
+  high:   { label: 'High',   color: 'text-red-600' },
+}
+
+const FAQS = [
+  { q: 'How do I add a new student or teacher?',
+    a: 'Go to Users in the sidebar → "Add User", fill in the details, and choose the credential delivery method.' },
+  { q: 'How do I create a new class?',
+    a: 'Go to Classes → "New Class". Select the level, arm, form teacher, and subjects, then submit.' },
+  { q: 'How do I send an announcement to the whole school?',
+    a: 'Open Announcements → "New Announcement", set audience to "Whole School", compose your message, and post.' },
+  { q: 'How do I view attendance across classes?',
+    a: 'Open Attendance. The By Class tab shows all classes with present/absent/late counts and rates.' },
+  { q: 'How do I manage the school subscription?',
+    a: 'Go to Subscription in the sidebar to view your current plan and billing history.' },
+  { q: 'How do I approve teacher-uploaded resources?',
+    a: 'When a teacher submits a resource it appears as Pending. Open Teacher Resources (or check notifications) to approve or reject.' },
+  { q: 'Where do I set up offline/bank transfer fee payments?',
+    a: 'Go to Fee Setup → Bank Account tab, enter your school account details. Parents will see them when choosing Bank Transfer.' },
+]
 
 export default function AdminSupportPage({ onNavigate }: Props) {
   const { profile } = useAuth()
-  const [tab,      setTab]      = useState<Tab>('faq')
+  const [tab,      setTab]      = useState<Tab>('tickets')
+  const [tickets,  setTickets]  = useState<Ticket[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [showNew,  setShowNew]  = useState(false)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [saving,   setSaving]   = useState(false)
   const [openFaq,  setOpenFaq]  = useState<number | null>(null)
-  const [thread,   setThread]   = useState<Thread>(null)
-  const [activeT,  setActiveT]  = useState<string | null>(null)
-  const [msgText,  setMsgText]  = useState('')
-  const [subject,  setSubject]  = useState('')
-  const [body,     setBody]     = useState('')
-  const [sent,     setSent]     = useState(false)
-  const [search,   setSearch]   = useState('')
 
-  function sendSuperAdmin() {
-    if (!msgText.trim()) return
-    setMsgText('')
+  const [form, setForm] = useState({ subject: '', body: '', priority: 'medium' as Prio })
+
+  useEffect(() => { if (profile?.school_id) loadTickets() }, [profile?.school_id])
+
+  async function loadTickets() {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('support_tickets')
+      .select('id, subject, body, status, priority, created_at, updated_at')
+      .eq('school_id', profile!.school_id!)
+      .order('created_at', { ascending: false })
+
+    if (error) { logSupabaseError('AdminSupport/load', error); setLoading(false); return }
+    setTickets((data ?? []) as Ticket[])
+    setLoading(false)
   }
 
-  function sendTeacher() {
-    if (!msgText.trim()) return
-    setMsgText('')
+  async function submitTicket() {
+    if (!form.subject.trim()) return
+    setSaving(true)
+    const { error } = await supabase.from('support_tickets').insert({
+      school_id:  profile!.school_id,
+      subject:    form.subject.trim(),
+      body:       form.body.trim() || null,
+      priority:   form.priority,
+      created_by: profile!.id,
+      status:     'open',
+    })
+    if (error) { logSupabaseError('AdminSupport/create', error); setSaving(false); return }
+    setForm({ subject: '', body: '', priority: 'medium' })
+    setShowNew(false)
+    setSaving(false)
+    loadTickets()
   }
 
-  const tabs: { id: Tab; label: string; icon: typeof MessageSquare; badge?: boolean }[] = [
-    { id: 'faq',      label: 'FAQs',            icon: HelpCircle   },
-    { id: 'messages', label: 'Messages',         icon: MessageSquare, badge: true },
-    { id: 'contact',  label: 'Contact Support',  icon: FileText     },
-  ]
+  const open       = tickets.filter(t => t.status === 'open').length
+  const inProgress = tickets.filter(t => t.status === 'in_progress').length
+  const resolved   = tickets.filter(t => t.status === 'resolved').length
+
+  function fmt(iso: string) {
+    return new Date(iso).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })
+  }
 
   return (
     <DashboardLayout
       activePage="admin-support"
       onNavigate={onNavigate}
-      title="Support Centre"
-      subtitle="Help, FAQs, and messaging with Learnora and your teachers"
+      title="Support"
+      subtitle="Raise tickets with Learnora or browse FAQs"
       nav={adminNav}
       user={profileToSidebarUser(profile)}
     >
-      <div className="max-w-[860px] flex flex-col gap-6">
+      <div className="max-w-[800px] flex flex-col gap-6">
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-canvas rounded-input p-1 w-fit">
-          {tabs.map(t => {
-            const Icon = t.icon
-            return (
-              <button
-                key={t.id}
-                onClick={() => { setTab(t.id); setThread(null); setActiveT(null) }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-[6px] text-sm font-semibold transition-colors ${tab === t.id ? 'bg-surface shadow text-foreground' : 'text-muted hover:text-foreground'}`}
-              >
-                <Icon size={14} />
-                {t.label}
-                {t.id === 'messages' && t.badge && (
-                  <span className="size-2 rounded-full bg-red-500" />
-                )}
-              </button>
-            )
-          })}
+        <div className="flex gap-1 bg-canvas rounded-card p-1 w-fit">
+          {([['tickets', 'My Tickets'], ['faq', 'FAQ']] as [Tab, string][]).map(([key, label]) => (
+            <button key={key} onClick={() => setTab(key)}
+              className={`h-9 px-5 rounded-md text-sm font-semibold transition-colors ${tab === key ? 'bg-white text-primary shadow-sm' : 'text-muted hover:text-foreground'}`}>
+              {label}
+            </button>
+          ))}
         </div>
 
-        {/* ── FAQ ── */}
-        {tab === 'faq' && (
-          <div className="flex flex-col gap-3">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-              <input
-                value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search FAQs..."
-                className="w-full h-10 pl-9 pr-4 border border-black/15 rounded-input text-sm outline-none focus:border-primary"
-              />
+        {/* ── Tickets tab ── */}
+        {tab === 'tickets' && (
+          <>
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-4">
+              {[
+                { label: 'Open',        value: open,       color: 'text-blue-600'  },
+                { label: 'In Progress', value: inProgress, color: 'text-amber-600' },
+                { label: 'Resolved',    value: resolved,   color: 'text-green-600' },
+              ].map(s => (
+                <div key={s.label} className="bg-surface rounded-card shadow-sm p-4">
+                  <p className={`text-2xl font-bold ${s.color}`}>{loading ? '—' : s.value}</p>
+                  <p className="text-xs text-muted mt-0.5">{s.label}</p>
+                </div>
+              ))}
             </div>
-            {faqs.filter(f => !search || f.q.toLowerCase().includes(search.toLowerCase())).map((faq, i) => (
-              <div key={i} className="bg-surface rounded-card shadow-sm overflow-hidden">
+
+            {/* New Ticket button / form */}
+            {!showNew ? (
+              <button
+                onClick={() => setShowNew(true)}
+                className="flex items-center gap-2 h-10 px-5 bg-primary text-white text-sm font-semibold rounded-pill hover:bg-primary-deep transition-colors shadow-primary w-fit"
+              >
+                <Plus size={14} /> New Support Ticket
+              </button>
+            ) : (
+              <div className="bg-surface rounded-card shadow-sm p-6 flex flex-col gap-4 border border-primary/20">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-foreground">New Support Ticket</h2>
+                  <button onClick={() => setShowNew(false)} className="text-muted hover:text-foreground">
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-muted mb-1.5">Subject <span className="text-red-500">*</span></label>
+                  <input
+                    value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))}
+                    placeholder="Briefly describe your issue"
+                    className="w-full h-11 px-4 border border-black/20 rounded-card text-sm text-foreground placeholder:text-muted outline-none focus:border-primary"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-muted mb-1.5">Details (optional)</label>
+                  <textarea
+                    rows={4}
+                    value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))}
+                    placeholder="Provide any relevant context, steps to reproduce, or error messages…"
+                    className="w-full border border-black/20 rounded-card px-4 py-3 text-sm text-foreground placeholder:text-muted outline-none focus:border-primary resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-muted mb-1.5">Priority</label>
+                  <select
+                    value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value as Prio }))}
+                    className="w-full h-11 px-3 border border-black/20 rounded-card text-sm text-foreground outline-none focus:border-primary bg-white appearance-none"
+                  >
+                    <option value="low">Low — general question or minor issue</option>
+                    <option value="medium">Medium — affecting some users</option>
+                    <option value="high">High — blocking critical operations</option>
+                  </select>
+                </div>
+
+                <div className="flex gap-3">
+                  <button onClick={() => setShowNew(false)}
+                    className="h-10 px-5 border border-black/20 text-foreground text-sm font-semibold rounded-pill hover:bg-canvas transition-colors">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitTicket}
+                    disabled={saving || !form.subject.trim()}
+                    className="flex items-center gap-2 h-10 px-5 bg-primary text-white text-sm font-semibold rounded-pill hover:bg-primary-deep transition-colors disabled:opacity-50"
+                  >
+                    {saving ? <Loader2 size={13} className="animate-spin" /> : null}
+                    {saving ? 'Submitting…' : 'Submit Ticket'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Ticket list */}
+            <div className="bg-surface rounded-card shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-black/6">
+                <h2 className="text-sm font-bold text-foreground">
+                  {loading ? 'Loading…' : `${tickets.length} ticket${tickets.length !== 1 ? 's' : ''}`}
+                </h2>
+              </div>
+
+              {loading ? (
+                <div className="py-12 text-center text-sm text-muted">Loading tickets…</div>
+              ) : tickets.length === 0 ? (
+                <div className="py-12 text-center">
+                  <HelpCircle size={28} className="mx-auto mb-3 text-muted opacity-30" />
+                  <p className="text-sm text-muted">No tickets yet.</p>
+                  <p className="text-xs text-muted mt-1">Submit one above and our team will respond.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-black/4">
+                  {tickets.map(t => {
+                    const cfg  = STATUS_CFG[t.status]
+                    const prio = PRIO_CFG[t.priority]
+                    const open = expanded === t.id
+
+                    return (
+                      <div key={t.id}>
+                        <button
+                          onClick={() => setExpanded(open ? null : t.id)}
+                          className="w-full flex items-start gap-4 px-6 py-4 text-left hover:bg-canvas/50 transition-colors"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 mb-1">
+                              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${cfg.color}`}>
+                                {cfg.label}
+                              </span>
+                              <span className={`text-xs font-semibold ${prio.color}`}>
+                                {prio.label} priority
+                              </span>
+                            </div>
+                            <p className="text-sm font-semibold text-foreground leading-snug">{t.subject}</p>
+                            {!open && t.body && (
+                              <p className="text-xs text-muted mt-0.5 line-clamp-1">{t.body}</p>
+                            )}
+                            <p className="text-xs text-muted mt-1">{fmt(t.created_at)}</p>
+                          </div>
+                          {open ? <ChevronUp size={15} className="text-muted shrink-0 mt-1" /> : <ChevronDown size={15} className="text-muted shrink-0 mt-1" />}
+                        </button>
+
+                        {open && t.body && (
+                          <div className="px-6 pb-5">
+                            <div className="bg-canvas rounded-card p-4 text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                              {t.body}
+                            </div>
+                            {t.status === 'resolved' && (
+                              <div className="flex items-center gap-2 mt-3 text-xs text-green-700 bg-green-50 border border-green-200 rounded-card px-3 py-2">
+                                <CheckCircle2 size={13} /> This ticket has been resolved by the Learnora team.
+                              </div>
+                            )}
+                            {t.status === 'in_progress' && (
+                              <div className="flex items-center gap-2 mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-card px-3 py-2">
+                                <Clock size={13} /> Our team is working on this.
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ── FAQ tab ── */}
+        {tab === 'faq' && (
+          <div className="bg-surface rounded-card shadow-sm divide-y divide-black/4 overflow-hidden">
+            {FAQS.map((f, i) => (
+              <div key={i}>
                 <button
                   onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                  className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-canvas/50 transition-colors"
+                  className="w-full flex items-center justify-between gap-4 px-6 py-4 text-left hover:bg-canvas/50 transition-colors"
                 >
-                  <span className="text-sm font-semibold text-foreground">{faq.q}</span>
-                  <ChevronRight size={15} className={`text-muted shrink-0 transition-transform ${openFaq === i ? 'rotate-90' : ''}`} />
+                  <p className="text-sm font-semibold text-foreground">{f.q}</p>
+                  {openFaq === i
+                    ? <ChevronUp size={15} className="text-muted shrink-0" />
+                    : <ChevronDown size={15} className="text-muted shrink-0" />
+                  }
                 </button>
                 {openFaq === i && (
-                  <div className="px-5 pb-5">
-                    <p className="text-sm text-muted leading-relaxed">{faq.a}</p>
+                  <div className="px-6 pb-5">
+                    <p className="text-sm text-muted leading-relaxed">{f.a}</p>
                   </div>
                 )}
               </div>
@@ -134,185 +308,17 @@ export default function AdminSupportPage({ onNavigate }: Props) {
           </div>
         )}
 
-        {/* ── Messages ── */}
-        {tab === 'messages' && (
-          <div className="flex flex-col gap-4">
-            {/* Thread selector if none chosen */}
-            {!thread && (
-              <>
-                <p className="text-sm text-muted">Choose a conversation to open.</p>
+        {/* Contact info */}
+        <div className="bg-canvas border border-black/8 rounded-card px-5 py-4">
+          <p className="text-xs text-muted">
+            Need urgent help? Email us at{' '}
+            <a href="mailto:support@learnora.io" className="text-primary font-semibold hover:underline">
+              support@learnora.io
+            </a>
+            {' '}or call <span className="font-semibold text-foreground">+234 800 LEARNORA</span>.
+          </p>
+        </div>
 
-                {/* Super Admin card */}
-                <button
-                  onClick={() => setThread('superadmin')}
-                  className="bg-surface rounded-card shadow-sm p-5 text-left flex items-center gap-4 hover:shadow-md transition-all"
-                >
-                  <div className="size-11 rounded-full bg-primary flex items-center justify-center text-white font-bold text-base shrink-0">L</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-foreground">Learnora Support</p>
-                    <p className="text-xs text-muted mt-0.5 truncate">Platform admin · Billing, subscriptions, account</p>
-                    <p className="text-xs text-muted mt-1 truncate italic">"{superAdminThread[superAdminThread.length - 1].text}"</p>
-                  </div>
-                  <ChevronRight size={16} className="text-muted shrink-0" />
-                </button>
-
-                {/* Teacher threads */}
-                <div className="bg-surface rounded-card shadow-sm overflow-hidden">
-                  <div className="px-5 py-3 border-b border-black/6">
-                    <p className="text-sm font-bold text-foreground">Teachers</p>
-                    <p className="text-xs text-muted">Direct messages with your school's teachers</p>
-                  </div>
-                  <div className="divide-y divide-black/4">
-                    {teacherThreads.map(t => (
-                      <button
-                        key={t.id}
-                        onClick={() => { setThread('teachers'); setActiveT(t.id) }}
-                        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-canvas/40 transition-colors"
-                      >
-                        <div className="size-9 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0">{t.initials}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold text-foreground">{t.name}</p>
-                            {t.unread && <span className="size-2 rounded-full bg-primary shrink-0" />}
-                          </div>
-                          <p className="text-xs text-muted truncate">{t.subject} · {t.preview}</p>
-                        </div>
-                        <span className="text-xs text-muted shrink-0">{t.time}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Super Admin thread */}
-            {thread === 'superadmin' && (
-              <div className="bg-surface rounded-card shadow-sm flex flex-col" style={{ minHeight: '420px' }}>
-                <div className="flex items-center gap-3 px-5 py-4 border-b border-black/6">
-                  <button onClick={() => setThread(null)} className="text-muted hover:text-foreground text-xs font-semibold mr-1">← Back</button>
-                  <div className="size-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold">L</div>
-                  <div>
-                    <p className="text-sm font-bold text-foreground">Learnora Support</p>
-                    <p className="text-xs text-muted">Super Admin · Platform support</p>
-                  </div>
-                </div>
-                <div className="flex-1 flex flex-col gap-3 p-5 overflow-y-auto">
-                  {superAdminThread.map((m, i) => (
-                    <div key={i} className={`flex ${m.from === 'me' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${m.from === 'me' ? 'bg-primary text-white rounded-br-sm' : 'bg-canvas text-foreground rounded-bl-sm'}`}>
-                        {m.text}
-                        <div className={`text-[10px] mt-1 ${m.from === 'me' ? 'text-white/60' : 'text-muted'}`}>{m.time}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="px-5 py-4 border-t border-black/6 flex gap-2">
-                  <input
-                    value={msgText} onChange={e => setMsgText(e.target.value)}
-                    placeholder="Message Learnora Support..."
-                    className="flex-1 h-10 px-4 border border-black/15 rounded-input text-sm outline-none focus:border-primary"
-                    onKeyDown={e => { if (e.key === 'Enter') sendSuperAdmin() }}
-                  />
-                  <button onClick={sendSuperAdmin} disabled={!msgText.trim()}
-                    className="size-10 bg-primary text-white rounded-full flex items-center justify-center hover:bg-primary-deep transition-colors disabled:opacity-40">
-                    <Send size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Teacher thread */}
-            {thread === 'teachers' && activeT && (() => {
-              const teacher = teacherThreads.find(t => t.id === activeT)!
-              const msgs = teacherMessages[activeT] ?? []
-              return (
-                <div className="bg-surface rounded-card shadow-sm flex flex-col" style={{ minHeight: '420px' }}>
-                  <div className="flex items-center gap-3 px-5 py-4 border-b border-black/6">
-                    <button onClick={() => setThread(null)} className="text-muted hover:text-foreground text-xs font-semibold mr-1">← Back</button>
-                    <div className="size-8 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{teacher.initials}</div>
-                    <div>
-                      <p className="text-sm font-bold text-foreground">{teacher.name}</p>
-                      <p className="text-xs text-muted">{teacher.subject} teacher</p>
-                    </div>
-                  </div>
-                  <div className="flex-1 flex flex-col gap-3 p-5 overflow-y-auto">
-                    {msgs.map((m, i) => (
-                      <div key={i} className={`flex ${m.from === 'me' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${m.from === 'me' ? 'bg-primary text-white rounded-br-sm' : 'bg-canvas text-foreground rounded-bl-sm'}`}>
-                          {m.text}
-                          <div className={`text-[10px] mt-1 ${m.from === 'me' ? 'text-white/60' : 'text-muted'}`}>{m.time}</div>
-                        </div>
-                      </div>
-                    ))}
-                    {msgs.length === 0 && (
-                      <p className="text-center text-sm text-muted py-8">No messages yet. Start a conversation below.</p>
-                    )}
-                  </div>
-                  <div className="px-5 py-4 border-t border-black/6 flex gap-2">
-                    <input
-                      value={msgText} onChange={e => setMsgText(e.target.value)}
-                      placeholder={`Message ${teacher.name}...`}
-                      className="flex-1 h-10 px-4 border border-black/15 rounded-input text-sm outline-none focus:border-primary"
-                      onKeyDown={e => { if (e.key === 'Enter') sendTeacher() }}
-                    />
-                    <button onClick={sendTeacher} disabled={!msgText.trim()}
-                      className="size-10 bg-primary text-white rounded-full flex items-center justify-center hover:bg-primary-deep transition-colors disabled:opacity-40">
-                      <Send size={14} />
-                    </button>
-                  </div>
-                </div>
-              )
-            })()}
-          </div>
-        )}
-
-        {/* ── Contact Support ── */}
-        {tab === 'contact' && (
-          <div className="bg-surface rounded-card shadow-sm p-6">
-            {sent ? (
-              <div className="text-center py-8">
-                <div className="size-14 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle2 size={24} className="text-green-600" />
-                </div>
-                <h3 className="text-base font-bold text-foreground mb-2">Request Submitted</h3>
-                <p className="text-sm text-muted mb-6">Our support team will respond within 1 business day.</p>
-                <button onClick={() => setSent(false)}
-                  className="h-10 px-5 border border-black/15 text-sm font-semibold text-foreground rounded-pill hover:border-primary hover:text-primary transition-colors">
-                  Submit Another
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={e => { e.preventDefault(); setSent(true) }} className="flex flex-col gap-5">
-                <div>
-                  <h3 className="text-base font-bold text-foreground">Contact Learnora Support</h3>
-                  <p className="text-sm text-muted mt-1">For technical issues, billing, or platform-level questions.</p>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-semibold text-foreground">Subject <span className="text-red-500">*</span></label>
-                  <input required value={subject} onChange={e => setSubject(e.target.value)}
-                    placeholder="Briefly describe your issue"
-                    className="h-11 px-4 border border-black/20 rounded-input text-sm outline-none focus:border-primary" />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-semibold text-foreground">Message <span className="text-red-500">*</span></label>
-                  <textarea required rows={5} value={body} onChange={e => setBody(e.target.value)}
-                    placeholder="Describe your issue in detail..."
-                    className="px-4 py-3 border border-black/20 rounded-input text-sm outline-none focus:border-primary resize-none" />
-                </div>
-                <div className="flex gap-3">
-                  <button type="button" onClick={() => { setSubject(''); setBody('') }}
-                    className="h-11 px-5 border border-black/15 text-sm font-semibold text-foreground rounded-pill hover:border-primary hover:text-primary transition-colors">
-                    Clear
-                  </button>
-                  <button type="submit"
-                    className="flex-1 h-11 bg-primary text-white text-sm font-semibold rounded-pill hover:bg-primary-deep transition-colors shadow-primary flex items-center justify-center gap-2">
-                    <Send size={14} /> Send Request
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        )}
       </div>
     </DashboardLayout>
   )

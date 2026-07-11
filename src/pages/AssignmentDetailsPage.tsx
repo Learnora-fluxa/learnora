@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { ArrowLeft, Calendar, Clock, BookOpen, Upload, CheckCircle2, X, FileText, AlertCircle, HelpCircle } from 'lucide-react'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import { useAuth, profileToSidebarUser } from '../contexts/AuthContext'
@@ -47,9 +47,10 @@ export default function AssignmentDetailsPage({ onNavigate }: Props) {
   const [assignment,    setAssignment]    = useState<AssignmentData | null>(null)
   const [loading,       setLoading]       = useState(true)
   const [note,          setNote]          = useState('')
-  const [files,         setFiles]         = useState<string[]>([])
+  const [fileObjects,   setFileObjects]   = useState<File[]>([])
   const [submitting,    setSubmitting]    = useState(false)
   const [error,         setError]         = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [isQuiz,        setIsQuiz]        = useState(false)
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([])
@@ -149,6 +150,19 @@ export default function AssignmentDetailsPage({ onNavigate }: Props) {
     setSubmitting(true)
     setError('')
 
+    // Upload files to Supabase Storage
+    const uploadedUrls: string[] = []
+    for (const file of fileObjects) {
+      const ext  = file.name.split('.').pop()
+      const path = `${profile!.school_id}/${assignment.id}/${Date.now()}_${file.name}`
+      const { error: upErr } = await supabase.storage
+        .from('assignment-submissions')
+        .upload(path, file, { contentType: file.type || `application/${ext}`, upsert: false })
+      if (upErr) { setError(`Upload failed: ${upErr.message}`); setSubmitting(false); return }
+      const { data: urlData } = supabase.storage.from('assignment-submissions').getPublicUrl(path)
+      uploadedUrls.push(urlData.publicUrl)
+    }
+
     const { error: err } = await supabase
       .from('assignment_submissions')
       .upsert({
@@ -156,6 +170,7 @@ export default function AssignmentDetailsPage({ onNavigate }: Props) {
         assignment_id:   assignment.id,
         student_id:      profile!.id,
         submission_text: note.trim() || null,
+        submission_url:  uploadedUrls[0] ?? null,
         status:          'submitted',
         submitted_at:    new Date().toISOString(),
       }, { onConflict: 'assignment_id,student_id' })
@@ -379,26 +394,39 @@ export default function AssignmentDetailsPage({ onNavigate }: Props) {
             <h2 className="text-lg font-bold text-foreground mb-1">{assignment.title}</h2>
             <p className="text-sm text-muted mb-5">{assignment.subjectName} · Due {fmtDate(assignment.dueDate)}</p>
 
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+              className="hidden"
+              onChange={e => {
+                const selected = Array.from(e.target.files ?? [])
+                setFileObjects(prev => [...prev, ...selected])
+                e.target.value = ''
+              }}
+            />
             <div
               className="border-2 border-dashed border-black/20 rounded-card p-8 flex flex-col items-center gap-3 cursor-pointer hover:border-primary hover:bg-primary/4 transition-colors mb-4"
-              onClick={() => setFiles(f => [...f, `Attachment_${f.length + 1}.pdf`])}
+              onClick={() => fileInputRef.current?.click()}
             >
               <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center">
                 <Upload size={22} className="text-primary" />
               </div>
               <div className="text-center">
                 <p className="text-sm font-semibold text-foreground">Click to attach a file (optional)</p>
-                <p className="text-xs text-muted mt-1">PDF, DOC, DOCX — max 50 MB</p>
+                <p className="text-xs text-muted mt-1">PDF, DOC, DOCX, images — max 50 MB</p>
               </div>
             </div>
 
-            {files.length > 0 && (
+            {fileObjects.length > 0 && (
               <div className="flex flex-col gap-2 mb-5">
-                {files.map((f, i) => (
+                {fileObjects.map((f, i) => (
                   <div key={i} className="flex items-center gap-3 bg-canvas rounded-card px-4 py-3">
                     <FileText size={16} className="text-primary shrink-0" />
-                    <span className="text-sm text-foreground flex-1">{f}</span>
-                    <button onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))}>
+                    <span className="text-sm text-foreground flex-1 truncate">{f.name}</span>
+                    <span className="text-xs text-muted shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
+                    <button onClick={() => setFileObjects(prev => prev.filter((_, j) => j !== i))}>
                       <X size={14} className="text-muted hover:text-foreground" />
                     </button>
                   </div>
@@ -419,7 +447,7 @@ export default function AssignmentDetailsPage({ onNavigate }: Props) {
           {error && <p className="text-sm text-red-500">{error}</p>}
 
           <button
-            disabled={submitting || (!note.trim() && files.length === 0)}
+            disabled={submitting || (!note.trim() && fileObjects.length === 0)}
             onClick={submitAssignment}
             className="h-12 bg-primary text-white text-sm font-bold rounded-pill shadow-primary hover:bg-primary-deep transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >

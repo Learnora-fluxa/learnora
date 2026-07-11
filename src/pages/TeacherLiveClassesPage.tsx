@@ -1,23 +1,24 @@
-﻿import { useState } from 'react'
-import { Video, Plus, Play, Clock, Users, Calendar, Mic, MicOff } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Video, Plus, Play, Clock, Users, Calendar, Mic, MicOff, Loader2, AlertCircle } from 'lucide-react'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import { teacherNav } from '../components/layout/Sidebar'
 import { useAuth, profileToSidebarUser } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
+import { logSupabaseError } from '../lib/supabaseError'
 
 type Props = { onNavigate: (page: string) => void }
+type Status = 'live' | 'upcoming' | 'ended'
 
-const myClasses = [
-  { id: 1, subject: 'Physics',     class: 'SS2A', topic: "Newton's Laws — Live Revision",  date: 'Today',  time: '2:00 PM', duration: '60 min', enrolled: 29, status: 'live'    },
-  { id: 2, subject: 'Physics',     class: 'SS2B', topic: 'Forces and Motion — Q&A',         date: 'Today',  time: '4:00 PM', duration: '45 min', enrolled: 28, status: 'upcoming'},
-  { id: 3, subject: 'Mathematics', class: 'SS1A', topic: 'Quadratic Equations',             date: 'Jun 10', time: '10:00 AM',duration: '60 min', enrolled: 32, status: 'upcoming'},
-  { id: 4, subject: 'Physics',     class: 'SS3A', topic: 'Organic Chemistry — Exam Prep',   date: 'Jun 12', time: '1:00 PM', duration: '90 min', enrolled: 31, status: 'upcoming'},
-]
-
-const recordings = [
-  { subject: 'Physics',     topic: 'Forces and Motion',         class: 'SS2A', date: 'Jun 4, 2026', duration: '58 min', views: 24 },
-  { subject: 'Mathematics', topic: 'Trigonometry Review',       class: 'SS1A', date: 'Jun 3, 2026', duration: '47 min', views: 19 },
-  { subject: 'Physics',     topic: 'Kinetic Energy Workshop',   class: 'SS2B', date: 'Jun 1, 2026', duration: '62 min', views: 31 },
-]
+interface Session {
+  id:               string
+  topic:            string
+  subject_name:     string
+  class_name:       string
+  scheduled_at:     string
+  duration_minutes: number
+  status:           Status
+  enrolled:         number
+}
 
 const subjectColor: Record<string, string> = {
   Physics:     'bg-primary/10 text-primary',
@@ -26,12 +27,97 @@ const subjectColor: Record<string, string> = {
   Chemistry:   'bg-red-50 text-red-500',
 }
 
+function colorFor(subject: string): string {
+  return subjectColor[subject] ?? 'bg-canvas text-muted'
+}
+
+function formatScheduled(iso: string): { date: string; time: string } {
+  const d = new Date(iso)
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
+  const day = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+
+  const dateLabel = day.getTime() === today.getTime()    ? 'Today'
+                  : day.getTime() === tomorrow.getTime() ? 'Tomorrow'
+                  : d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })
+  const timeLabel = d.toLocaleTimeString('en-NG', { hour: 'numeric', minute: '2-digit', hour12: true })
+  return { date: dateLabel, time: timeLabel }
+}
+
 export default function TeacherLiveClassesPage({ onNavigate }: Props) {
   const { profile } = useAuth()
-  const [tab, setTab] = useState<'upcoming' | 'recordings'>('upcoming')
+  const [tab,      setTab]      = useState<'upcoming' | 'recordings'>('upcoming')
+  const [sessions, setSessions] = useState<Session[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [starting, setStarting] = useState<Set<string>>(new Set())
+  const [startErr, setStartErr] = useState('')
 
-  const liveClass = myClasses.find(c => c.status === 'live')
-  const upcoming  = myClasses.filter(c => c.status === 'upcoming')
+  useEffect(() => { if (profile?.id) loadSessions() }, [profile?.id])
+
+  async function loadSessions() {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('live_sessions')
+      .select('id, topic, scheduled_at, duration_minutes, status, classes!class_id(id, name), subjects!subject_id(name)')
+      .eq('teacher_id', profile!.id)
+      .order('scheduled_at', { ascending: false })
+
+    if (error) { logSupabaseError('TeacherLiveClasses/sessions', error); setLoading(false); return }
+
+    type SRaw = {
+      id: string; topic: string; scheduled_at: string; duration_minutes: number; status: string
+      classes: { id: string; name: string } | null
+      subjects: { name: string } | null
+    }
+
+    const items: Session[] = ((data ?? []) as unknown as SRaw[]).map(r => ({
+      id:               r.id,
+      topic:            r.topic,
+      subject_name:     r.subjects?.name ?? '—',
+      class_name:       r.classes?.name ?? '—',
+      scheduled_at:     r.scheduled_at,
+      duration_minutes: r.duration_minutes ?? 60,
+      status:           (r.status as Status) ?? 'upcoming',
+      enrolled:         0,
+    }))
+
+    setSessions(items)
+    setLoading(false)
+  }
+
+  async function startOrEnter(session: Session) {
+    setStartErr('')
+    setStarting(prev => new Set([...prev, session.id]))
+    const { data, error } = await supabase.functions.invoke('daily-token', {
+      body: { action: 'create', session_id: session.id },
+    })
+    setStarting(prev => { const n = new Set(prev); n.delete(session.id); return n })
+
+    if (error || !data?.token) {
+      setStartErr(data?.error ?? 'Could not start the session. Check your Daily.co setup.')
+      return
+    }
+    sessionStorage.setItem('learnora_session_id',       session.id)
+    sessionStorage.setItem('learnora_daily_token',      data.token)
+    sessionStorage.setItem('learnora_daily_room_url',   data.room_url)
+    sessionStorage.setItem('learnora_session_topic',    session.topic)
+    sessionStorage.setItem('learnora_session_class',    session.class_name)
+    sessionStorage.setItem('learnora_session_is_teacher', 'true')
+    onNavigate('pre-class-lobby')
+  }
+
+  async function endSession(sessionId: string) {
+    await supabase.from('live_sessions').update({ status: 'ended' }).eq('id', sessionId)
+    loadSessions()
+  }
+
+  const liveSession  = sessions.find(s => s.status === 'live')
+  const upcoming     = sessions.filter(s => s.status === 'upcoming').sort(
+    (a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
+  )
+  const ended        = sessions.filter(s => s.status === 'ended')
+  const totalStudents = sessions.reduce((s, c) => s + c.enrolled, 0)
 
   return (
     <DashboardLayout
@@ -47,20 +133,27 @@ export default function TeacherLiveClassesPage({ onNavigate }: Props) {
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Live Now',     value: myClasses.filter(c => c.status === 'live').length,    color: 'text-red-600 bg-red-50'     },
-            { label: 'Upcoming',     value: upcoming.length,                                       color: 'text-primary bg-primary/10' },
-            { label: 'Recordings',   value: recordings.length,                                     color: 'text-green-600 bg-green-50' },
-            { label: 'Total Students',value: myClasses.reduce((s, c) => s + c.enrolled, 0),       color: 'text-foreground bg-canvas'  },
+            { label: 'Live Now',      value: loading ? '—' : liveSession ? 1 : 0, color: 'text-red-600'   },
+            { label: 'Upcoming',      value: loading ? '—' : upcoming.length,      color: 'text-primary'   },
+            { label: 'Recordings',    value: loading ? '—' : ended.length,         color: 'text-green-600' },
+            { label: 'Total Students',value: loading ? '—' : totalStudents,        color: 'text-foreground'},
           ].map(s => (
             <div key={s.label} className="bg-surface rounded-card shadow-sm p-5">
-              <p className={`text-2xl font-bold ${s.color.split(' ')[0]}`}>{s.value}</p>
+              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
               <p className="text-xs text-muted mt-0.5">{s.label}</p>
             </div>
           ))}
         </div>
 
+        {/* Error toast */}
+        {startErr && (
+          <div className="flex items-start gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-card text-sm text-red-700">
+            <AlertCircle size={14} className="shrink-0 mt-0.5" /> {startErr}
+          </div>
+        )}
+
         {/* Live now banner */}
-        {liveClass && (
+        {!loading && liveSession && (
           <div className="bg-red-50 border border-red-200 rounded-card p-5">
             <div className="flex items-start gap-4 flex-wrap">
               <div className="flex items-center gap-2">
@@ -68,17 +161,27 @@ export default function TeacherLiveClassesPage({ onNavigate }: Props) {
                 <span className="text-xs font-bold text-red-600 uppercase tracking-wide">LIVE NOW</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-base font-bold text-foreground">{liveClass.topic}</p>
-                <p className="text-xs text-muted mt-0.5">{liveClass.subject} · {liveClass.class} · {liveClass.time} · {liveClass.duration}</p>
+                <p className="text-base font-bold text-foreground">{liveSession.topic}</p>
+                <p className="text-xs text-muted mt-0.5">
+                  {liveSession.subject_name} · {liveSession.class_name} · {liveSession.duration_minutes} min
+                </p>
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => onNavigate('live-classroom')}
-                  className="flex items-center gap-1.5 h-10 px-5 bg-red-600 text-white text-sm font-semibold rounded-pill hover:bg-red-700 transition-colors"
+                  onClick={() => startOrEnter(liveSession)}
+                  disabled={starting.has(liveSession.id)}
+                  className="flex items-center gap-1.5 h-10 px-5 bg-red-600 text-white text-sm font-semibold rounded-pill hover:bg-red-700 transition-colors disabled:opacity-60"
                 >
-                  <Mic size={14} /> Enter Class
+                  {starting.has(liveSession.id)
+                    ? <Loader2 size={14} className="animate-spin" />
+                    : <Mic size={14} />
+                  }
+                  {starting.has(liveSession.id) ? 'Joining…' : 'Enter Class'}
                 </button>
-                <button className="flex items-center gap-1.5 h-10 px-4 border border-red-300 text-red-600 text-sm font-semibold rounded-pill hover:bg-red-50 transition-colors">
+                <button
+                  onClick={() => endSession(liveSession.id)}
+                  className="flex items-center gap-1.5 h-10 px-4 border border-red-300 text-red-600 text-sm font-semibold rounded-pill hover:bg-red-50 transition-colors"
+                >
                   <MicOff size={14} /> End Session
                 </button>
               </div>
@@ -91,8 +194,10 @@ export default function TeacherLiveClassesPage({ onNavigate }: Props) {
           <div className="flex gap-1 bg-canvas rounded-card p-1">
             {(['upcoming', 'recordings'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)}
-                className={`px-4 h-9 text-sm font-semibold rounded-md transition-colors capitalize ${tab === t ? 'bg-white text-primary shadow-sm' : 'text-muted hover:text-foreground'}`}>
-                {t === 'upcoming' ? 'Upcoming Sessions' : 'Recordings'}
+                className={`px-4 h-9 text-sm font-semibold rounded-md transition-colors ${tab === t ? 'bg-white text-primary shadow-sm' : 'text-muted hover:text-foreground'}`}>
+                {t === 'upcoming'
+                  ? `Upcoming Sessions${!loading ? ` (${upcoming.length})` : ''}`
+                  : `Recordings${!loading ? ` (${ended.length})` : ''}`}
               </button>
             ))}
           </div>
@@ -104,87 +209,101 @@ export default function TeacherLiveClassesPage({ onNavigate }: Props) {
           </button>
         </div>
 
-        {/* ── Upcoming ── */}
-        {tab === 'upcoming' && (
-          <div className="flex flex-col gap-4">
-            {upcoming.map(cls => (
-              <div key={cls.id} className="bg-surface rounded-card shadow-sm p-5">
-                <div className="flex flex-wrap items-start gap-4">
-                  <div className={`size-11 rounded-card flex items-center justify-center shrink-0 ${subjectColor[cls.subject] ?? 'bg-canvas text-muted'}`}>
-                    <Video size={18} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${subjectColor[cls.subject] ?? 'bg-canvas text-muted'}`}>{cls.subject}</span>
-                      <span className="text-xs text-muted font-semibold">{cls.class}</span>
-                    </div>
-                    <h3 className="text-base font-bold text-foreground leading-snug">{cls.topic}</h3>
-                    <div className="flex flex-wrap items-center gap-4 mt-2 text-xs text-muted">
-                      <span className="flex items-center gap-1"><Calendar size={11} /> {cls.date}</span>
-                      <span className="flex items-center gap-1"><Clock size={11} /> {cls.time} · {cls.duration}</span>
-                      <span className="flex items-center gap-1"><Users size={11} /> {cls.enrolled} students</span>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <>
-                        <button
-                          onClick={() => onNavigate('schedule-class')}
-                          className="h-9 px-4 border border-black/15 text-sm font-semibold text-foreground rounded-pill hover:border-primary hover:text-primary transition-colors"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => onNavigate('pre-class-lobby')}
-                          className="flex items-center gap-1.5 h-9 px-4 bg-primary text-white text-sm font-semibold rounded-pill hover:bg-primary-deep transition-colors"
-                        >
-                          <Play size={13} /> Start
-                        </button>
-                      </>
-                  </div>
-                </div>
-              </div>
-            ))}
+        {loading && (
+          <div className="py-16 text-center text-sm text-muted">Loading your sessions…</div>
+        )}
 
-            {upcoming.length === 0 && (
+        {/* Upcoming */}
+        {!loading && tab === 'upcoming' && (
+          <div className="flex flex-col gap-4">
+            {upcoming.length === 0 ? (
               <div className="text-center py-16 text-muted">
                 <Video size={32} className="mx-auto mb-3 opacity-30" />
                 <p className="text-sm">No upcoming sessions.</p>
-                <button
-                  onClick={() => onNavigate('schedule-class')}
-                  className="mt-3 text-sm text-primary font-semibold hover:underline"
-                >
+                <button onClick={() => onNavigate('schedule-class')} className="mt-3 text-sm text-primary font-semibold hover:underline">
                   Schedule a session
                 </button>
               </div>
-            )}
+            ) : upcoming.map(cls => {
+              const { date, time } = formatScheduled(cls.scheduled_at)
+              return (
+                <div key={cls.id} className="bg-surface rounded-card shadow-sm p-5">
+                  <div className="flex flex-wrap items-start gap-4">
+                    <div className={`size-11 rounded-card flex items-center justify-center shrink-0 ${colorFor(cls.subject_name)}`}>
+                      <Video size={18} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${colorFor(cls.subject_name)}`}>{cls.subject_name}</span>
+                        <span className="text-xs text-muted font-semibold">{cls.class_name}</span>
+                      </div>
+                      <h3 className="text-base font-bold text-foreground leading-snug">{cls.topic}</h3>
+                      <div className="flex flex-wrap items-center gap-4 mt-2 text-xs text-muted">
+                        <span className="flex items-center gap-1"><Calendar size={11} /> {date}</span>
+                        <span className="flex items-center gap-1"><Clock size={11} /> {time} · {cls.duration_minutes} min</span>
+                        {cls.enrolled > 0 && (
+                          <span className="flex items-center gap-1"><Users size={11} /> {cls.enrolled} students</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={() => onNavigate('schedule-class')}
+                        className="h-9 px-4 border border-black/15 text-sm font-semibold text-foreground rounded-pill hover:border-primary hover:text-primary transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => startOrEnter(cls)}
+                        disabled={starting.has(cls.id)}
+                        className="flex items-center gap-1.5 h-9 px-4 bg-primary text-white text-sm font-semibold rounded-pill hover:bg-primary-deep transition-colors disabled:opacity-60"
+                      >
+                        {starting.has(cls.id)
+                          ? <Loader2 size={13} className="animate-spin" />
+                          : <Play size={13} />
+                        }
+                        {starting.has(cls.id) ? 'Starting…' : 'Start'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
 
-        {/* ── Recordings ── */}
-        {tab === 'recordings' && (
+        {/* Recordings (ended sessions) */}
+        {!loading && tab === 'recordings' && (
           <div className="flex flex-col gap-3">
-            {recordings.map((r, i) => (
-              <div key={i} className="bg-surface rounded-card shadow-sm p-5 flex flex-wrap items-center gap-4">
-                <div className={`size-11 rounded-card flex items-center justify-center shrink-0 ${subjectColor[r.subject] ?? 'bg-canvas text-muted'}`}>
-                  <Video size={18} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-foreground">{r.topic}</p>
-                  <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-muted">
-                    <span>{r.subject} · {r.class}</span>
-                    <span>{r.date}</span>
-                    <span><Clock size={10} className="inline mr-0.5" />{r.duration}</span>
-                    <span><Users size={10} className="inline mr-0.5" />{r.views} views</span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => onNavigate('class-recordings')}
-                  className="flex items-center gap-1.5 h-9 px-4 border border-black/15 text-sm font-semibold text-foreground rounded-pill hover:border-primary hover:text-primary transition-colors"
-                >
-                  <Play size={13} /> Play
-                </button>
+            {ended.length === 0 ? (
+              <div className="text-center py-16 text-muted">
+                <Video size={32} className="mx-auto mb-3 opacity-30" />
+                <p className="text-sm">No past sessions yet.</p>
               </div>
-            ))}
+            ) : ended.map(r => {
+              const { date } = formatScheduled(r.scheduled_at)
+              return (
+                <div key={r.id} className="bg-surface rounded-card shadow-sm p-5 flex flex-wrap items-center gap-4">
+                  <div className={`size-11 rounded-card flex items-center justify-center shrink-0 ${colorFor(r.subject_name)}`}>
+                    <Video size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-foreground">{r.topic}</p>
+                    <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-muted">
+                      <span>{r.subject_name} · {r.class_name}</span>
+                      <span>{date}</span>
+                      <span className="flex items-center gap-1"><Clock size={10} /> {r.duration_minutes} min</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onNavigate('class-recordings')}
+                    className="flex items-center gap-1.5 h-9 px-4 border border-black/15 text-sm font-semibold text-foreground rounded-pill hover:border-primary hover:text-primary transition-colors"
+                  >
+                    <Play size={13} /> Play
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
 

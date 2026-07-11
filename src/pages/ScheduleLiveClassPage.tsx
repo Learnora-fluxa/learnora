@@ -1,27 +1,118 @@
-﻿import { useState } from 'react'
-import { Video, CheckCircle2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Video, CheckCircle2, Loader2 } from 'lucide-react'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import { teacherNav } from '../components/layout/Sidebar'
 import { useAuth, profileToSidebarUser } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
+import { logSupabaseError } from '../lib/supabaseError'
 
 type Props = { onNavigate: (page: string) => void }
 
-const subjects  = ['Physics', 'Mathematics', 'Chemistry', 'English', 'Biology']
-const classes   = ['SS1A', 'SS1B', 'SS2A', 'SS2B', 'SS3A', 'SS3B']
-const durations = ['30 minutes', '45 minutes', '60 minutes', '90 minutes']
-const platforms = ['Built-in (Learnora Live)', 'Zoom', 'Google Meet']
+interface ClassOpt   { id: string; name: string }
+interface SubjectOpt { id: string; name: string }
+
+const DURATIONS = [
+  { label: '30 minutes', minutes: 30 },
+  { label: '45 minutes', minutes: 45 },
+  { label: '60 minutes', minutes: 60 },
+  { label: '90 minutes', minutes: 90 },
+  { label: '2 hours',   minutes: 120 },
+]
 
 export default function ScheduleLiveClassPage({ onNavigate }: Props) {
   const { profile } = useAuth()
-  const [done, setDone] = useState(false)
+
+  const [loadingOpts, setLoadingOpts] = useState(true)
+  const [saving,      setSaving]      = useState(false)
+  const [done,        setDone]        = useState(false)
+  const [error,       setError]       = useState('')
+  const [classes,     setClasses]     = useState<ClassOpt[]>([])
+  const [subjects,    setSubjects]    = useState<SubjectOpt[]>([])
+
   const [form, setForm] = useState({
-    title: '', subject: subjects[0], cls: classes[0],
-    date: '', time: '', duration: durations[2], platform: platforms[0],
-    description: '', sendNotif: true,
+    title:      '',
+    classId:    '',
+    subjectId:  '',
+    date:       '',
+    time:       '',
+    duration:   60,
+    description:'',
+    sendNotif:  true,
   })
 
-  function set(k: string, v: string | boolean) {
+  useEffect(() => { if (profile?.id) loadOptions() }, [profile?.id])
+
+  async function loadOptions() {
+    setLoadingOpts(true)
+    const { data, error: err } = await supabase
+      .from('teacher_assignments')
+      .select('class_id, subject_id, classes!class_id(id, name), subjects!subject_id(id, name)')
+      .eq('teacher_id', profile!.id)
+
+    if (err) { logSupabaseError('ScheduleLiveClass/options', err); setLoadingOpts(false); return }
+
+    type Row = {
+      class_id: string; subject_id: string
+      classes:  { id: string; name: string } | null
+      subjects: { id: string; name: string } | null
+    }
+
+    const rows = (data ?? []) as unknown as Row[]
+    const classMap:  Record<string, ClassOpt>   = {}
+    const subjectMap: Record<string, SubjectOpt> = {}
+
+    for (const r of rows) {
+      if (r.classes)  classMap[r.class_id]    = r.classes
+      if (r.subjects) subjectMap[r.subject_id] = r.subjects
+    }
+
+    const classList   = Object.values(classMap)
+    const subjectList = Object.values(subjectMap)
+    setClasses(classList)
+    setSubjects(subjectList)
+    setForm(f => ({
+      ...f,
+      classId:   classList[0]?.id   ?? '',
+      subjectId: subjectList[0]?.id ?? '',
+    }))
+    setLoadingOpts(false)
+  }
+
+  function set<K extends keyof typeof form>(k: K, v: typeof form[K]) {
     setForm(f => ({ ...f, [k]: v }))
+  }
+
+  async function handleSubmit() {
+    setError('')
+    if (!form.title.trim()) { setError('Session title is required.'); return }
+    if (!form.date)         { setError('Date is required.'); return }
+    if (!form.time)         { setError('Time is required.'); return }
+    if (!form.classId)      { setError('Select a class.'); return }
+    if (!form.subjectId)    { setError('Select a subject.'); return }
+
+    setSaving(true)
+    const scheduledAt = new Date(`${form.date}T${form.time}`).toISOString()
+
+    const { error: insertErr } = await supabase.from('live_sessions').insert({
+      school_id:        profile!.school_id,
+      teacher_id:       profile!.id,
+      class_id:         form.classId,
+      subject_id:       form.subjectId,
+      topic:            form.title.trim(),
+      scheduled_at:     scheduledAt,
+      duration_minutes: form.duration,
+      status:           'upcoming',
+    })
+
+    if (insertErr) {
+      logSupabaseError('ScheduleLiveClass/insert', insertErr)
+      setError('Failed to schedule class. Please try again.')
+      setSaving(false)
+      return
+    }
+
+    setSaving(false)
+    setDone(true)
   }
 
   if (done) {
@@ -39,10 +130,10 @@ export default function ScheduleLiveClassPage({ onNavigate }: Props) {
           </div>
           <h1 className="text-2xl font-bold text-foreground mb-2">Class Scheduled!</h1>
           <p className="text-sm text-muted max-w-[360px] mb-2">
-            <span className="font-semibold text-foreground">{form.title || 'Live Class'}</span> has been scheduled.
-            Students will receive a notification.
+            <span className="font-semibold text-foreground">{form.title}</span> has been scheduled.
+            {form.sendNotif && ' Students will receive a notification.'}
           </p>
-          <p className="text-xs text-muted mb-8">{form.date} · {form.time} · {form.duration}</p>
+          <p className="text-xs text-muted mb-8">{form.date} · {form.time} · {DURATIONS.find(d => d.minutes === form.duration)?.label}</p>
           <div className="flex gap-3">
             <button
               onClick={() => onNavigate('teacher-live-classes')}
@@ -51,7 +142,7 @@ export default function ScheduleLiveClassPage({ onNavigate }: Props) {
               Back to Live Classes
             </button>
             <button
-              onClick={() => { setDone(false); setForm(f => ({ ...f, title: '', date: '', time: '' })) }}
+              onClick={() => { setDone(false); setForm(f => ({ ...f, title: '', date: '', time: '', description: '' })) }}
               className="h-11 px-6 border border-black/20 text-foreground text-sm font-semibold rounded-pill hover:bg-canvas transition-colors"
             >
               Schedule Another
@@ -73,6 +164,10 @@ export default function ScheduleLiveClassPage({ onNavigate }: Props) {
     >
       <div className="max-w-[680px] flex flex-col gap-6">
 
+        {error && (
+          <div className="px-4 py-3 rounded-card bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>
+        )}
+
         {/* Basic info */}
         <div className="bg-surface rounded-card shadow-sm p-6 flex flex-col gap-4">
           <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
@@ -80,7 +175,7 @@ export default function ScheduleLiveClassPage({ onNavigate }: Props) {
           </h2>
 
           <div>
-            <label className="block text-xs font-semibold text-muted mb-1.5">Session Title</label>
+            <label className="block text-xs font-semibold text-muted mb-1.5">Session Title <span className="text-red-500">*</span></label>
             <input
               value={form.title}
               onChange={e => set('title', e.target.value)}
@@ -91,27 +186,35 @@ export default function ScheduleLiveClassPage({ onNavigate }: Props) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-muted mb-1.5">Subject</label>
+              <label className="block text-xs font-semibold text-muted mb-1.5">Subject <span className="text-red-500">*</span></label>
               <select
-                value={form.subject}
-                onChange={e => set('subject', e.target.value)}
-                className="w-full h-11 px-3 border border-black/20 rounded-card text-sm text-foreground outline-none focus:border-primary bg-white appearance-none"
+                value={form.subjectId}
+                onChange={e => set('subjectId', e.target.value)}
+                disabled={loadingOpts}
+                className="w-full h-11 px-3 border border-black/20 rounded-card text-sm text-foreground outline-none focus:border-primary bg-white appearance-none disabled:opacity-50"
               >
-                {subjects.map(s => <option key={s}>{s}</option>)}
+                {loadingOpts
+                  ? <option>Loading…</option>
+                  : subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)
+                }
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-muted mb-1.5">Class</label>
+              <label className="block text-xs font-semibold text-muted mb-1.5">Class <span className="text-red-500">*</span></label>
               <select
-                value={form.cls}
-                onChange={e => set('cls', e.target.value)}
-                className="w-full h-11 px-3 border border-black/20 rounded-card text-sm text-foreground outline-none focus:border-primary bg-white appearance-none"
+                value={form.classId}
+                onChange={e => set('classId', e.target.value)}
+                disabled={loadingOpts}
+                className="w-full h-11 px-3 border border-black/20 rounded-card text-sm text-foreground outline-none focus:border-primary bg-white appearance-none disabled:opacity-50"
               >
-                {classes.map(c => <option key={c}>{c}</option>)}
+                {loadingOpts
+                  ? <option>Loading…</option>
+                  : classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
+                }
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-muted mb-1.5">Date</label>
+              <label className="block text-xs font-semibold text-muted mb-1.5">Date <span className="text-red-500">*</span></label>
               <input
                 type="date"
                 value={form.date}
@@ -120,7 +223,7 @@ export default function ScheduleLiveClassPage({ onNavigate }: Props) {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-muted mb-1.5">Time</label>
+              <label className="block text-xs font-semibold text-muted mb-1.5">Time <span className="text-red-500">*</span></label>
               <input
                 type="time"
                 value={form.time}
@@ -132,20 +235,10 @@ export default function ScheduleLiveClassPage({ onNavigate }: Props) {
               <label className="block text-xs font-semibold text-muted mb-1.5">Duration</label>
               <select
                 value={form.duration}
-                onChange={e => set('duration', e.target.value)}
+                onChange={e => set('duration', Number(e.target.value))}
                 className="w-full h-11 px-3 border border-black/20 rounded-card text-sm text-foreground outline-none focus:border-primary bg-white appearance-none"
               >
-                {durations.map(d => <option key={d}>{d}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-muted mb-1.5">Platform</label>
-              <select
-                value={form.platform}
-                onChange={e => set('platform', e.target.value)}
-                className="w-full h-11 px-3 border border-black/20 rounded-card text-sm text-foreground outline-none focus:border-primary bg-white appearance-none"
-              >
-                {platforms.map(p => <option key={p}>{p}</option>)}
+                {DURATIONS.map(d => <option key={d.minutes} value={d.minutes}>{d.label}</option>)}
               </select>
             </div>
           </div>
@@ -163,6 +256,7 @@ export default function ScheduleLiveClassPage({ onNavigate }: Props) {
 
           <label className="flex items-center gap-3 cursor-pointer">
             <button
+              type="button"
               onClick={() => set('sendNotif', !form.sendNotif)}
               className={`w-10 h-5.5 rounded-full relative transition-colors ${form.sendNotif ? 'bg-primary' : 'bg-black/15'}`}
             >
@@ -176,10 +270,11 @@ export default function ScheduleLiveClassPage({ onNavigate }: Props) {
         </div>
 
         <button
-          onClick={() => form.title && form.date && form.time ? setDone(true) : undefined}
-          className="h-12 bg-primary text-white text-sm font-bold rounded-pill shadow-primary hover:bg-primary-deep transition-colors disabled:opacity-40"
+          onClick={handleSubmit}
+          disabled={saving || loadingOpts}
+          className="h-12 bg-primary text-white text-sm font-bold rounded-pill shadow-primary hover:bg-primary-deep transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
         >
-          Schedule Class
+          {saving ? <><Loader2 size={15} className="animate-spin" /> Scheduling…</> : 'Schedule Class'}
         </button>
       </div>
     </DashboardLayout>

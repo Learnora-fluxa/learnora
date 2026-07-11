@@ -17,21 +17,21 @@ interface Badge {
   xp:          number
 }
 
-// Static badge catalog — earned status derived from DB activity
+// Static badge catalog — earned status derived from real DB data
 const BADGE_CATALOG: Omit<Badge, 'earned' | 'earnedDate'>[] = [
-  { id: 'first_login',    title: 'First Login',        description: 'Logged in for the first time',               icon: '🚀', category: 'Milestones',    xp: 50   },
-  { id: 'course_done',    title: 'Course Completer',   description: 'Completed your first full lesson',            icon: '📗', category: 'Learning',      xp: 200  },
-  { id: 'streak_7',       title: '7-Day Streak',       description: 'Studied every day for a week',               icon: '🔥', category: 'Consistency',   xp: 150  },
-  { id: 'top_class',      title: 'Top of the Class',   description: 'Ranked #1 in your class leaderboard',        icon: '🥇', category: 'Excellence',    xp: 500  },
-  { id: 'forum_post',     title: 'Forum Starter',      description: 'Posted your first discussion thread',        icon: '💬', category: 'Collaboration', xp: 100  },
-  { id: 'streak_30',      title: '30-Day Streak',      description: 'Studied every day for a month',              icon: '📅', category: 'Consistency',   xp: 500  },
-  { id: 'five_subjects',  title: 'Polymath',           description: 'Completed lessons in 5 different subjects',  icon: '🧠', category: 'Learning',      xp: 600  },
-  { id: 'goal_crusher',   title: 'Goal Crusher',       description: 'Completed all academic goals for a term',    icon: '🎯', category: 'Excellence',    xp: 350  },
+  { id: 'first_login',       title: 'First Steps',          description: 'Created your Learnora account',                icon: '🚀', category: 'Milestones',  xp: 50  },
+  { id: 'first_lesson',      title: 'First Lesson',         description: 'Completed your very first lesson',             icon: '📗', category: 'Learning',    xp: 100 },
+  { id: 'first_assignment',  title: 'First Submission',     description: 'Submitted your first assignment',              icon: '📝', category: 'Milestones',  xp: 100 },
+  { id: 'streak_7',          title: '7-Day Streak',         description: 'Studied every day for a week',                 icon: '🔥', category: 'Consistency', xp: 150 },
+  { id: 'streak_30',         title: '30-Day Streak',        description: 'Studied every day for a full month',           icon: '📅', category: 'Consistency', xp: 500 },
+  { id: 'five_subjects',     title: 'Polymath',             description: 'Completed lessons across 5 different subjects', icon: '🧠', category: 'Learning',    xp: 300 },
+  { id: 'ten_lessons',       title: 'Knowledge Seeker',     description: 'Completed 10 or more lessons',                 icon: '📚', category: 'Learning',    xp: 200 },
+  { id: 'high_scorer',       title: 'High Achiever',        description: 'Maintained an average grade of 80%+',          icon: '⭐', category: 'Excellence',  xp: 400 },
+  { id: 'perfect_attendance',title: 'Perfect Attendance',   description: 'Not a single absence on record',               icon: '🎖️', category: 'Excellence',  xp: 350 },
+  { id: 'five_assignments',  title: 'Consistent Learner',   description: 'Submitted 5 or more assignments',              icon: '✅', category: 'Milestones',  xp: 200 },
 ]
 
-const categories = ['All', 'Milestones', 'Learning', 'Consistency', 'Excellence', 'Collaboration']
-
-const db = supabase as unknown as { from: (t: string) => any }
+const categories = ['All', 'Milestones', 'Learning', 'Consistency', 'Excellence']
 
 export default function AchievementsPage({ onNavigate }: Props) {
   const { profile } = useAuth()
@@ -48,19 +48,31 @@ export default function AchievementsPage({ onNavigate }: Props) {
     const sid      = profile!.id
     const schoolId = profile!.school_id!
 
-    const [lpRes, gsRes, forumRes, goalsRes] = await Promise.all([
-      supabase.from('lesson_progress').select('completed_at, lesson_id').eq('student_id', sid).eq('completed', true).not('completed_at', 'is', null).order('completed_at', { ascending: true }),
-      supabase.from('grade_summaries').select('subject_id').eq('student_id', sid).eq('school_id', schoolId),
-      db.from('forum_threads').select('id').eq('author_id', sid).limit(1),
-      db.from('student_goals').select('id').eq('student_id', sid).eq('done', true).limit(1),
+    const [lpRes, gsRes, attRes, subRes] = await Promise.all([
+      supabase.from('lesson_progress')
+        .select('completed_at, lesson_id')
+        .eq('student_id', sid).eq('completed', true)
+        .not('completed_at', 'is', null)
+        .order('completed_at', { ascending: true }),
+      supabase.from('grade_summaries')
+        .select('subject_id, avg_score, max_score')
+        .eq('student_id', sid).eq('school_id', schoolId),
+      supabase.from('attendance_records')
+        .select('status')
+        .eq('student_id', sid).eq('school_id', schoolId),
+      supabase.from('assignment_submissions')
+        .select('id, submitted_at')
+        .eq('student_id', sid)
+        .not('submitted_at', 'is', null)
+        .order('submitted_at', { ascending: true }),
     ])
 
-    const lpRows = (lpRes.data ?? []) as { completed_at: string; lesson_id: string }[]
-    const gsRows = (gsRes.data ?? []) as { subject_id: string }[]
-    const forumRows = (forumRes.data ?? []) as { id: string }[]
-    const goalRows  = (goalsRes.data ?? []) as { id: string }[]
+    const lpRows  = (lpRes.data  ?? []) as { completed_at: string; lesson_id: string }[]
+    const gsRows  = (gsRes.data  ?? []) as { subject_id: string; avg_score: number | null; max_score: number | null }[]
+    const attRows = (attRes.data ?? []) as { status: string }[]
+    const subRows = (subRes.data ?? []) as { id: string; submitted_at: string }[]
 
-    // Streak from completed_at dates
+    // Compute streak
     const days = new Set(lpRows.map(r => r.completed_at.slice(0, 10)))
     const today = new Date()
     let streak = 0
@@ -71,21 +83,38 @@ export default function AchievementsPage({ onNavigate }: Props) {
       else if (i > 0) break
     }
 
-    const joined = (profile as any).created_at ? new Date((profile as any).created_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
-    const firstLesson = lpRows[0]?.completed_at ? new Date(lpRows[0].completed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
+    // Average grade across all subjects
+    const avgGrade = gsRows.length > 0
+      ? gsRows.reduce((sum, g) => {
+          const pct = (g.max_score ?? 0) > 0 ? ((g.avg_score ?? 0) / g.max_score!) * 100 : 0
+          return sum + pct
+        }, 0) / gsRows.length
+      : 0
+
+    const hasAbsence = attRows.some(a => a.status === 'absent')
+
+    function fmtDate(iso: string) {
+      return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    }
+
+    const joinedDate   = (profile as { created_at?: string }).created_at ? fmtDate((profile as { created_at: string }).created_at) : ''
+    const firstLesson  = lpRows[0]?.completed_at  ? fmtDate(lpRows[0].completed_at) : ''
+    const firstSubmit  = subRows[0]?.submitted_at ? fmtDate(subRows[0].submitted_at) : ''
 
     const result: Badge[] = BADGE_CATALOG.map(b => {
       let earned = false
       let earnedDate: string | undefined
 
-      if (b.id === 'first_login')   { earned = true; earnedDate = joined }
-      if (b.id === 'course_done')   { earned = lpRows.length > 0; earnedDate = firstLesson }
-      if (b.id === 'streak_7')      { earned = streak >= 7 }
-      if (b.id === 'streak_30')     { earned = streak >= 30 }
-      if (b.id === 'top_class')     { earned = false }
-      if (b.id === 'forum_post')    { earned = forumRows.length > 0 }
-      if (b.id === 'five_subjects') { earned = new Set(gsRows.map(g => g.subject_id)).size >= 5 }
-      if (b.id === 'goal_crusher')  { earned = goalRows.length > 0 }
+      if (b.id === 'first_login')        { earned = true;                           earnedDate = joinedDate  }
+      if (b.id === 'first_lesson')       { earned = lpRows.length > 0;              earnedDate = firstLesson }
+      if (b.id === 'first_assignment')   { earned = subRows.length > 0;             earnedDate = firstSubmit }
+      if (b.id === 'streak_7')           { earned = streak >= 7  }
+      if (b.id === 'streak_30')          { earned = streak >= 30 }
+      if (b.id === 'five_subjects')      { earned = new Set(gsRows.map(g => g.subject_id)).size >= 5 }
+      if (b.id === 'ten_lessons')        { earned = lpRows.length >= 10 }
+      if (b.id === 'high_scorer')        { earned = avgGrade >= 80 && gsRows.length > 0 }
+      if (b.id === 'perfect_attendance') { earned = attRows.length > 0 && !hasAbsence }
+      if (b.id === 'five_assignments')   { earned = subRows.length >= 5 }
 
       return { ...b, earned, earnedDate }
     })
@@ -127,13 +156,23 @@ export default function AchievementsPage({ onNavigate }: Props) {
 
       {/* Progress bar */}
       <div className="bg-surface rounded-card shadow-sm p-5 mb-5">
-        <div className="flex justify-between text-xs font-semibold text-muted mb-2">
-          <span>Progress to Level 7</span>
-          <span>{totalXP} / 2500 XP</span>
-        </div>
-        <div className="h-2.5 bg-canvas rounded-full overflow-hidden">
-          <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${Math.min((totalXP / 2500) * 100, 100)}%` }} />
-        </div>
+        {(() => {
+          const xpPerLevel = 500
+          const xpInLevel  = totalXP % xpPerLevel
+          const nextLevel  = level + 1
+          const pct        = Math.min((xpInLevel / xpPerLevel) * 100, 100)
+          return (
+            <>
+              <div className="flex justify-between text-xs font-semibold text-muted mb-2">
+                <span>Progress to Level {nextLevel}</span>
+                <span>{xpInLevel} / {xpPerLevel} XP</span>
+              </div>
+              <div className="h-2.5 bg-canvas rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
+              </div>
+            </>
+          )
+        })()}
       </div>
 
       {/* Category tabs */}

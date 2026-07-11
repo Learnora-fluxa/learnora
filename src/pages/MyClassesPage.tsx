@@ -143,7 +143,13 @@ export default function MyClassesPage({ onNavigate }: Props) {
 
                   <div className="flex gap-2 pt-1">
                     <button
-                      onClick={() => onNavigate('class-details')}
+                      onClick={() => {
+                        sessionStorage.setItem('learnora_selected_class_id', c.classId)
+                        sessionStorage.setItem('learnora_selected_subject_id', c.subjectId)
+                        sessionStorage.setItem('learnora_selected_class_name', c.className)
+                        sessionStorage.setItem('learnora_selected_subject_name', c.subjectName)
+                        onNavigate('class-details')
+                      }}
                       className="flex-1 h-9 border border-primary text-primary text-sm font-semibold rounded-pill hover:bg-primary hover:text-white transition-colors flex items-center justify-center gap-1"
                     >
                       <BookOpen size={13} /> View Class

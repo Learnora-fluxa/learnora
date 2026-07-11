@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { CheckCircle2, ChevronRight, Copy } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { CheckCircle2, ChevronRight, Copy, CreditCard, Landmark, AlertCircle } from 'lucide-react'
 import DashboardLayout from '../../components/layout/DashboardLayout'
 import { superAdminNav } from '../../components/layout/Sidebar'
 import { useAuth, profileToSidebarUser } from '../../contexts/AuthContext'
@@ -33,13 +33,16 @@ export default function OnboardSchoolPage({ onNavigate }: Props) {
   const { profile } = useAuth()
   const sidebarUser  = profileToSidebarUser(profile)
 
-  const [step,     setStep]    = useState<Step>('school')
-  const [plan,     setPlan]    = useState('professional')
-  const [loading,  setLoading] = useState(false)
-  const [error,    setError]   = useState('')
-  const [done,     setDone]    = useState(false)
+  const [step,      setStep]      = useState<Step>('school')
+  const [plan,      setPlan]      = useState('professional')
+  const [payMethod, setPayMethod] = useState<'paystack' | 'bank_transfer'>('paystack')
+  const [loading,   setLoading]  = useState(false)
+  const [error,     setError]    = useState('')
+  const [done,      setDone]     = useState(false)
   const [schoolCode, setSchoolCode] = useState('')
-  const [copied,   setCopied]  = useState(false)
+  const [copied,    setCopied]   = useState(false)
+
+  const [platformBank, setPlatformBank] = useState({ bankName: '', acctName: '', acctNumber: '' })
 
   // School fields
   const [schoolName,    setSchoolName]    = useState('')
@@ -54,6 +57,19 @@ export default function OnboardSchoolPage({ onNavigate }: Props) {
   const [adminPhone, setAdminPhone] = useState('')
 
   const stepIndex = steps.findIndex(s => s.key === step)
+
+  useEffect(() => {
+    if (step === 'plan') loadPlatformBank()
+  }, [step])
+
+  async function loadPlatformBank() {
+    const { data } = await supabase
+      .from('platform_config')
+      .select('bank_name, bank_account_name, bank_account_number')
+      .maybeSingle()
+    const d = data as { bank_name: string | null; bank_account_name: string | null; bank_account_number: string | null } | null
+    if (d) setPlatformBank({ bankName: d.bank_name ?? '', acctName: d.bank_account_name ?? '', acctNumber: d.bank_account_number ?? '' })
+  }
 
   function advance() {
     const nextStep = steps[stepIndex + 1]
@@ -74,14 +90,15 @@ export default function OnboardSchoolPage({ onNavigate }: Props) {
       const { error: insertError } = await supabase
         .from('schools')
         .insert({
-          name:                schoolName,
+          name:                         schoolName,
           code,
-          state:               schoolState || null,
-          address:             schoolAddress || null,
-          email:               schoolEmail   || null,
-          phone:               schoolPhone   || null,
-          subscription_plan:   plan,
-          subscription_status: 'active',
+          state:                        schoolState   || null,
+          address:                      schoolAddress || null,
+          email:                        schoolEmail   || null,
+          phone:                        schoolPhone   || null,
+          subscription_plan:            plan,
+          subscription_status:          payMethod === 'bank_transfer' ? 'pending_payment' : 'active',
+          subscription_payment_method:  payMethod,
         })
       if (insertError) throw insertError
       setSchoolCode(code)
@@ -107,8 +124,15 @@ export default function OnboardSchoolPage({ onNavigate }: Props) {
           <div className="size-16 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-6">
             <CheckCircle2 size={28} className="text-green-600" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-3">{schoolName} is live!</h1>
-          <p className="text-sm text-muted mb-6">The school has been added to the platform. Share the school code with the admin so they can complete setup.</p>
+          <h1 className="text-2xl font-bold text-foreground mb-3">
+            {payMethod === 'bank_transfer' ? `${schoolName} is registered!` : `${schoolName} is live!`}
+          </h1>
+          <p className="text-sm text-muted mb-6">
+            {payMethod === 'bank_transfer'
+              ? 'The school has been registered and is pending payment confirmation. Confirm the bank transfer in Platform Billing to activate the school.'
+              : 'The school has been added to the platform. Share the school code with the admin so they can complete setup.'
+            }
+          </p>
           <div className="flex items-center gap-2 bg-canvas border border-black/10 rounded-card px-4 py-3 mb-8 justify-center">
             <span className="text-lg font-bold text-primary tracking-widest">{schoolCode}</span>
             <button onClick={copyCode} className="ml-2 p-1.5 rounded-md hover:bg-black/5 text-muted hover:text-foreground transition-colors">
@@ -242,6 +266,53 @@ export default function OnboardSchoolPage({ onNavigate }: Props) {
                   </button>
                 ))}
               </div>
+
+              <div className="border-t border-black/8 pt-4 flex flex-col gap-3">
+                <h3 className="text-sm font-bold text-foreground">Subscription Payment</h3>
+                {[
+                  { id: 'paystack' as const,      icon: CreditCard, label: 'Online (Paystack)',      sub: 'School is activated immediately after onboarding.' },
+                  { id: 'bank_transfer' as const, icon: Landmark,   label: 'Bank Transfer (Offline)', sub: 'School is pending until you confirm receipt.' },
+                ].map(m => (
+                  <button key={m.id} onClick={() => setPayMethod(m.id)}
+                    className={`flex items-center gap-4 p-4 rounded-card border-2 text-left transition-colors ${payMethod === m.id ? 'border-primary bg-primary/5' : 'border-black/10 hover:border-primary/40'}`}>
+                    <div className={`size-9 rounded-full flex items-center justify-center shrink-0 ${payMethod === m.id ? 'bg-primary text-white' : 'bg-canvas text-muted'}`}>
+                      <m.icon size={16} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-foreground">{m.label}</p>
+                      <p className="text-xs text-muted mt-0.5">{m.sub}</p>
+                    </div>
+                    <div className={`size-5 rounded-full border-2 shrink-0 flex items-center justify-center ${payMethod === m.id ? 'border-primary bg-primary' : 'border-black/20'}`}>
+                      {payMethod === m.id && <div className="size-2 bg-white rounded-full" />}
+                    </div>
+                  </button>
+                ))}
+
+                {payMethod === 'bank_transfer' && (
+                  <div className="bg-canvas border border-black/10 rounded-card p-4 flex flex-col gap-2">
+                    <p className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Transfer to Learnora</p>
+                    {platformBank.acctNumber ? (
+                      <>
+                        {[
+                          { label: 'Bank',           value: platformBank.bankName   || '—' },
+                          { label: 'Account Name',   value: platformBank.acctName   || '—' },
+                          { label: 'Account Number', value: platformBank.acctNumber        },
+                        ].map(r => (
+                          <div key={r.label} className="flex justify-between text-sm">
+                            <span className="text-muted">{r.label}</span>
+                            <span className={`font-bold text-foreground ${r.label === 'Account Number' ? 'font-mono tracking-widest' : ''}`}>{r.value}</span>
+                          </div>
+                        ))}
+                      </>
+                    ) : (
+                      <div className="flex items-start gap-2">
+                        <AlertCircle size={13} className="text-amber-500 mt-0.5 shrink-0" />
+                        <p className="text-xs text-amber-700">Bank details not set. Go to Platform Settings → add Learnora bank account before sending schools this option.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </>
           )}
 
@@ -255,6 +326,7 @@ export default function OnboardSchoolPage({ onNavigate }: Props) {
                   { label: 'Admin',    value: adminName   || '—' },
                   { label: 'Admin Email', value: adminEmail || '—' },
                   { label: 'Plan',     value: plan === 'professional' ? 'Professional' : 'Starter' },
+                  { label: 'Payment',  value: payMethod === 'bank_transfer' ? 'Bank Transfer (pending activation)' : 'Online (Paystack)' },
                   { label: 'Billing',  value: '₦850/student/term · starts on activation' },
                 ].map(r => (
                   <div key={r.label} className="flex items-center justify-between p-3 bg-canvas rounded-card">

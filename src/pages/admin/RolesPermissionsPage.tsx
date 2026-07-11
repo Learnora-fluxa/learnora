@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Shield, Check, X, Save, CheckCircle2 } from 'lucide-react'
 import DashboardLayout from '../../components/layout/DashboardLayout'
 import { adminNav } from '../../components/layout/Sidebar'
@@ -8,42 +8,42 @@ type Props = { onNavigate: (page: string) => void }
 type Role  = 'admin' | 'teacher' | 'student' | 'parent'
 
 const roles: { id: Role; label: string; color: string }[] = [
-  { id: 'admin',   label: 'School Admin', color: 'bg-red-50 text-red-600'    },
-  { id: 'teacher', label: 'Teacher',      color: 'bg-primary/10 text-primary' },
-  { id: 'student', label: 'Student',      color: 'bg-green-50 text-green-600' },
-  { id: 'parent',  label: 'Parent',       color: 'bg-amber-50 text-amber-600' },
+  { id: 'admin',   label: 'School Admin', color: 'bg-red-50 text-red-600'     },
+  { id: 'teacher', label: 'Teacher',      color: 'bg-primary/10 text-primary'  },
+  { id: 'student', label: 'Student',      color: 'bg-green-50 text-green-600'  },
+  { id: 'parent',  label: 'Parent',       color: 'bg-amber-50 text-amber-600'  },
 ]
 
 const permissions: { category: string; items: { key: string; label: string }[] }[] = [
   { category: 'Students', items: [
-    { key: 'view_students',   label: 'View students' },
-    { key: 'invite_students', label: 'Invite students' },
-    { key: 'edit_students',   label: 'Edit student profiles' },
-    { key: 'delete_students', label: 'Delete student accounts' },
+    { key: 'view_students',   label: 'View students'          },
+    { key: 'invite_students', label: 'Invite students'        },
+    { key: 'edit_students',   label: 'Edit student profiles'  },
+    { key: 'delete_students', label: 'Delete student accounts'},
   ]},
   { category: 'Courses', items: [
-    { key: 'view_courses',    label: 'View courses' },
-    { key: 'create_courses',  label: 'Create/edit courses' },
-    { key: 'delete_courses',  label: 'Delete courses' },
-    { key: 'enroll_students', label: 'Enroll students' },
+    { key: 'view_courses',    label: 'View courses'       },
+    { key: 'create_courses',  label: 'Create/edit courses'},
+    { key: 'delete_courses',  label: 'Delete courses'     },
+    { key: 'enroll_students', label: 'Enroll students'    },
   ]},
   { category: 'Assignments', items: [
-    { key: 'view_assignments',   label: 'View assignments' },
+    { key: 'view_assignments',   label: 'View assignments'   },
     { key: 'create_assignments', label: 'Create assignments' },
-    { key: 'grade_assignments',  label: 'Grade submissions' },
+    { key: 'grade_assignments',  label: 'Grade submissions'  },
     { key: 'submit_assignments', label: 'Submit assignments' },
   ]},
   { category: 'Finance', items: [
-    { key: 'view_finance',   label: 'View financial data' },
-    { key: 'create_invoices',label: 'Create invoices' },
-    { key: 'process_payments',label: 'Process payments' },
-    { key: 'view_reports',   label: 'View finance reports' },
+    { key: 'view_finance',    label: 'View financial data'  },
+    { key: 'create_invoices', label: 'Create invoices'      },
+    { key: 'process_payments',label: 'Process payments'     },
+    { key: 'view_reports',    label: 'View finance reports' },
   ]},
   { category: 'Settings', items: [
-    { key: 'manage_settings', label: 'Manage school settings' },
-    { key: 'view_audit_logs', label: 'View audit logs' },
-    { key: 'manage_roles',    label: 'Manage roles & permissions' },
-    { key: 'manage_billing',  label: 'Manage subscription' },
+    { key: 'manage_settings', label: 'Manage school settings'   },
+    { key: 'view_audit_logs', label: 'View audit logs'          },
+    { key: 'manage_roles',    label: 'Manage roles & permissions'},
+    { key: 'manage_billing',  label: 'Manage subscription'      },
   ]},
 ]
 
@@ -56,26 +56,53 @@ const defaultMatrix: Matrix = {
   parent:  { view_students:true,invite_students:false,edit_students:false,delete_students:false,view_courses:true,create_courses:false,delete_courses:false,enroll_students:false,view_assignments:true,create_assignments:false,grade_assignments:false,submit_assignments:false,view_finance:true,create_invoices:false,process_payments:true,view_reports:false,manage_settings:false,view_audit_logs:false,manage_roles:false,manage_billing:false },
 }
 
-export default function RolesPermissionsPage({ onNavigate }: Props) {
+function storageKey(schoolId: string) {
+  return `learnora_role_permissions_${schoolId}`
+}
+
+export default function RolesPermissionsPage({ onNavigate: _onNavigate }: Props) {
   const { profile } = useAuth()
   const [matrix, setMatrix] = useState<Matrix>(defaultMatrix)
   const [role,   setRole]   = useState<Role>('teacher')
   const [saved,  setSaved]  = useState(false)
 
+  useEffect(() => {
+    if (!profile?.school_id) return
+    try {
+      const raw = localStorage.getItem(storageKey(profile.school_id))
+      if (raw) setMatrix(JSON.parse(raw))
+    } catch { /* ignore parse errors */ }
+  }, [profile?.school_id])
+
   function toggle(key: string) {
     setMatrix(prev => ({ ...prev, [role]: { ...prev[role], [key]: !prev[role][key] } }))
+  }
+
+  function handleSave() {
+    if (profile?.school_id) {
+      try {
+        localStorage.setItem(storageKey(profile.school_id), JSON.stringify(matrix))
+      } catch { /* storage quota exceeded */ }
+    }
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
   }
 
   return (
     <DashboardLayout
       activePage="settings"
-      onNavigate={onNavigate}
+      onNavigate={_onNavigate}
       title="Roles & Permissions"
       subtitle="Control what each role can access and do"
       nav={adminNav}
       user={profileToSidebarUser(profile)}
     >
       <div className="flex flex-col gap-5 max-w-[820px]">
+
+        {/* Info note */}
+        <div className="bg-primary/5 border border-primary/15 rounded-card px-5 py-3.5 text-sm text-muted">
+          This reference shows what each role is allowed to do. Actual system access is enforced by database security policies — changes here document your intended configuration for your team.
+        </div>
 
         {/* Role selector */}
         <div className="flex gap-3 flex-wrap">
@@ -120,10 +147,10 @@ export default function RolesPermissionsPage({ onNavigate }: Props) {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 2500) }}
+            onClick={handleSave}
             className="flex items-center gap-2 h-11 px-6 bg-primary text-white text-sm font-semibold rounded-pill shadow-primary hover:bg-primary-deep transition-colors"
           >
-            <Save size={15} /> Save Permissions
+            <Save size={15} /> Save Configuration
           </button>
           {saved && (
             <div className="flex items-center gap-2 text-green-600 text-sm font-semibold">

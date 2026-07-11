@@ -10,7 +10,7 @@ import { supabase } from '../../lib/supabase'
 import { logSupabaseError } from '../../lib/supabaseError'
 
 type Props = { onNavigate: (page: string) => void }
-type PayStatus = 'Paid' | 'Partial' | 'Unpaid' | 'Overdue'
+type PayStatus = 'Paid' | 'Partial' | 'Unpaid' | 'Overdue' | 'Pending'
 
 interface DBStudent {
   id: string
@@ -21,6 +21,7 @@ interface DBStudent {
   paid: number
   lastPayment: string
   status: PayStatus
+  hasPendingOffline: boolean
 }
 
 const statusConfig: Record<PayStatus, { color: string; icon: typeof CheckCircle2 }> = {
@@ -28,9 +29,10 @@ const statusConfig: Record<PayStatus, { color: string; icon: typeof CheckCircle2
   Partial: { color: 'bg-amber-50 text-amber-700',  icon: Clock        },
   Unpaid:  { color: 'bg-red-50 text-red-600',      icon: XCircle      },
   Overdue: { color: 'bg-red-100 text-red-700',     icon: AlertCircle  },
+  Pending: { color: 'bg-blue-50 text-blue-700',    icon: Clock        },
 }
 
-const FILTERS: (PayStatus | 'All')[] = ['All', 'Paid', 'Partial', 'Unpaid', 'Overdue']
+const FILTERS: (PayStatus | 'All')[] = ['All', 'Paid', 'Partial', 'Unpaid', 'Overdue', 'Pending']
 const OFFLINE_METHODS = ['Cash', 'Bank Transfer', 'Cheque', 'POS']
 
 function fmt(n: number) { return '₦' + n.toLocaleString('en-NG') }
@@ -63,6 +65,8 @@ export default function FeeCollectionPage({ onNavigate }: Props) {
   const [offNote,       setOffNote]       = useState('')
   const [offDone,       setOffDone]       = useState(false)
 
+  const [confirming,    setConfirming]    = useState<Set<string>>(new Set())
+
   const [showReminder,  setShowReminder]  = useState(false)
   const [reminderSent,  setReminderSent]  = useState(false)
 
@@ -89,7 +93,7 @@ export default function FeeCollectionPage({ onNavigate }: Props) {
         .in('student_id', studentIds),
       supabase
         .from('invoices')
-        .select('id, student_id, amount, paid_amount, status, created_at')
+        .select('id, student_id, amount, paid_amount, status, created_at, payment_method')
         .eq('school_id', schoolId),
     ])
 
@@ -100,31 +104,39 @@ export default function FeeCollectionPage({ onNavigate }: Props) {
     }
 
     const invRows = (invRes.data ?? []) as {
-      id: string; student_id: string; amount: number; paid_amount: number; status: string; created_at: string | null
+      id: string; student_id: string; amount: number; paid_amount: number
+      status: string; created_at: string | null; payment_method: string | null
     }[]
-    const byStudent: Record<string, { invoiceId: string; expected: number; paid: number; lastIso: string }> = {}
+    const byStudent: Record<string, { invoiceId: string; expected: number; paid: number; lastIso: string; hasPendingOffline: boolean }> = {}
     for (const inv of invRows) {
       const sid = inv.student_id
-      if (!byStudent[sid]) byStudent[sid] = { invoiceId: inv.id, expected: 0, paid: 0, lastIso: '' }
-      byStudent[sid].expected += inv.amount ?? 0
-      byStudent[sid].paid     += inv.paid_amount ?? 0
+      if (!byStudent[sid]) byStudent[sid] = { invoiceId: inv.id, expected: 0, paid: 0, lastIso: '', hasPendingOffline: false }
+      if (inv.status === 'pending_offline') {
+        byStudent[sid].hasPendingOffline = true
+        byStudent[sid].expected += inv.amount ?? 0
+      } else {
+        byStudent[sid].expected += inv.amount ?? 0
+        byStudent[sid].paid     += inv.paid_amount ?? 0
+      }
       const iso = inv.created_at ?? ''
       if (iso > byStudent[sid].lastIso) byStudent[sid].lastIso = iso
     }
 
     const rows: DBStudent[] = studentProfiles.map(s => {
-      const agg = byStudent[s.id]
-      const expected = agg?.expected ?? 0
-      const paid     = agg?.paid     ?? 0
+      const agg              = byStudent[s.id]
+      const expected         = agg?.expected ?? 0
+      const paid             = agg?.paid     ?? 0
+      const hasPendingOffline = agg?.hasPendingOffline ?? false
       return {
-        id:          s.id,
-        name:        s.full_name ?? 'Unknown',
-        className:   classMap[s.id] ?? '—',
-        invoiceId:   agg?.invoiceId ?? null,
+        id:               s.id,
+        name:             s.full_name ?? 'Unknown',
+        className:        classMap[s.id] ?? '—',
+        invoiceId:        agg?.invoiceId ?? null,
         expected,
         paid,
-        lastPayment: agg?.lastIso ? fmtDate(agg.lastIso) : '—',
-        status:      deriveStatus(expected, paid),
+        lastPayment:      agg?.lastIso ? fmtDate(agg.lastIso) : '—',
+        hasPendingOffline,
+        status:           hasPendingOffline ? 'Pending' : deriveStatus(expected, paid),
       }
     })
 
@@ -145,7 +157,8 @@ export default function FeeCollectionPage({ onNavigate }: Props) {
   const totalExpected = students.reduce((s, st) => s + st.expected, 0)
   const totalPaid     = students.reduce((s, st) => s + st.paid,     0)
   const totalBalance  = totalExpected - totalPaid
-  const notPaid       = students.filter(s => s.status !== 'Paid').length
+  const notPaid       = students.filter(s => s.status !== 'Paid' && s.status !== 'Pending').length
+  const pendingCount  = students.filter(s => s.status === 'Pending').length
 
   function openOffline(student: DBStudent) {
     setOffStudent(student)
@@ -188,6 +201,39 @@ export default function FeeCollectionPage({ onNavigate }: Props) {
     loadData()
   }
 
+  async function confirmReceipt(student: DBStudent) {
+    setConfirming(prev => new Set([...prev, student.id]))
+
+    const { data: pendingInvs, error: fetchErr } = await supabase
+      .from('invoices')
+      .select('id, amount')
+      .eq('student_id', student.id)
+      .eq('school_id', profile!.school_id!)
+      .eq('status', 'pending_offline')
+
+    if (fetchErr) {
+      logSupabaseError('FeeCollection.confirmReceipt/fetch', fetchErr)
+      setConfirming(prev => { const n = new Set(prev); n.delete(student.id); return n })
+      return
+    }
+
+    for (const inv of (pendingInvs ?? []) as { id: string; amount: number }[]) {
+      const { error } = await supabase
+        .from('invoices')
+        .update({
+          status:       'paid',
+          paid_amount:  inv.amount,
+          confirmed_by: profile!.id,
+          confirmed_at: new Date().toISOString(),
+        })
+        .eq('id', inv.id)
+      if (error) logSupabaseError('FeeCollection.confirmReceipt/update', error)
+    }
+
+    setConfirming(prev => { const n = new Set(prev); n.delete(student.id); return n })
+    loadData()
+  }
+
   function sendReminders() {
     setReminderSent(true)
     setTimeout(() => { setReminderSent(false); setShowReminder(false) }, 2000)
@@ -204,12 +250,19 @@ export default function FeeCollectionPage({ onNavigate }: Props) {
     >
       <div className="max-w-[1100px] flex flex-col gap-6">
 
+        {!loading && pendingCount > 0 && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-card px-5 py-3.5 text-sm text-blue-800">
+            <Clock size={15} className="text-blue-500 shrink-0" />
+            <span><strong>{pendingCount} student{pendingCount !== 1 ? 's' : ''}</strong> submitted offline bank transfers awaiting your confirmation. Click <strong>Confirm Receipt</strong> once you've verified the transfer.</span>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             { label: 'Total Expected',  value: loading ? '…' : fmt(totalExpected), color: 'text-foreground'  },
             { label: 'Total Collected', value: loading ? '…' : fmt(totalPaid),     color: 'text-green-600'   },
             { label: 'Outstanding',     value: loading ? '…' : fmt(totalBalance),  color: 'text-red-500'     },
-            { label: 'Not Fully Paid',  value: loading ? '…' : `${notPaid} students`, color: 'text-amber-600' },
+            { label: 'Pending Confirm', value: loading ? '…' : `${pendingCount} students`, color: 'text-blue-600' },
           ].map(s => (
             <div key={s.label} className="bg-surface rounded-card shadow-sm p-5">
               <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
@@ -308,12 +361,23 @@ export default function FeeCollectionPage({ onNavigate }: Props) {
                         </span>
                       </td>
                       <td className="px-5 py-3.5">
-                        {s.status !== 'Paid' && (
+                        {s.status === 'Pending' ? (
+                          <button
+                            onClick={() => confirmReceipt(s)}
+                            disabled={confirming.has(s.id)}
+                            className="flex items-center gap-1 text-xs font-semibold text-green-600 hover:underline whitespace-nowrap disabled:opacity-50"
+                          >
+                            {confirming.has(s.id)
+                              ? <><Loader2 size={11} className="animate-spin" /> Confirming…</>
+                              : <><CheckCircle2 size={11} /> Confirm Receipt</>
+                            }
+                          </button>
+                        ) : s.status !== 'Paid' ? (
                           <button onClick={() => openOffline(s)}
                             className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline whitespace-nowrap">
                             <Plus size={11} /> Record Payment
                           </button>
-                        )}
+                        ) : null}
                       </td>
                     </tr>
                   )
