@@ -4,7 +4,7 @@ import DashboardLayout from '../components/layout/DashboardLayout'
 import { teacherNav } from '../components/layout/Sidebar'
 import { useAuth, profileToSidebarUser } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { logSupabaseError } from '../lib/supabaseError'
+import { logSupabaseError, functionErrorMessage } from '../lib/supabaseError'
 
 type Props = { onNavigate: (page: string) => void }
 type Status = 'live' | 'upcoming' | 'ended'
@@ -95,7 +95,11 @@ export default function TeacherLiveClassesPage({ onNavigate }: Props) {
     setStarting(prev => { const n = new Set(prev); n.delete(session.id); return n })
 
     if (error || !data?.token) {
-      setStartErr(data?.error ?? 'Could not start the session. Check your Daily.co setup.')
+      setStartErr(
+        error
+          ? await functionErrorMessage(error, 'Could not start the session.')
+          : (data?.error ?? 'Could not start the session. Check your Daily.co setup.')
+      )
       return
     }
     sessionStorage.setItem('learnora_session_id',       session.id)

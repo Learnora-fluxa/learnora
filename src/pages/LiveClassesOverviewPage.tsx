@@ -3,7 +3,7 @@ import { Video, Calendar, Clock, Users, Loader2, AlertCircle } from 'lucide-reac
 import DashboardLayout from '../components/layout/DashboardLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { logSupabaseError } from '../lib/supabaseError'
+import { logSupabaseError, functionErrorMessage } from '../lib/supabaseError'
 
 type Props = { onNavigate: (page: string) => void }
 
@@ -121,7 +121,11 @@ export default function LiveClassesOverviewPage({ onNavigate }: Props) {
     setJoining(prev => { const n = new Set(prev); n.delete(session.id); return n })
 
     if (invErr || !data?.token) {
-      setJoinErr(data?.error ?? 'Could not join — the teacher may not have started yet.')
+      setJoinErr(
+        invErr
+          ? await functionErrorMessage(invErr, 'Could not join — the teacher may not have started yet.')
+          : (data?.error ?? 'Could not join — the teacher may not have started yet.')
+      )
       return
     }
     sessionStorage.setItem('learnora_session_id',         session.id)

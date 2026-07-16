@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Search, BookOpen, PenLine, User, X, Megaphone, GraduationCap } from 'lucide-react'
 import DashboardLayout from '../components/layout/DashboardLayout'
+import { teacherNav, adminNav, superAdminNav } from '../components/layout/Sidebar'
 import { useAuth, profileToSidebarUser } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -90,6 +91,12 @@ export default function GlobalSearchPage({ onNavigate }: Props) {
       onNavigate={onNavigate}
       title="Search"
       subtitle="Find anything across Learnora"
+      nav={
+        profile?.role === 'teacher'     ? teacherNav
+        : profile?.role === 'admin'       ? adminNav
+        : profile?.role === 'super_admin' ? superAdminNav
+        : undefined
+      }
       user={sidebarUser}
     >
       <div className="max-w-[760px] flex flex-col gap-5">

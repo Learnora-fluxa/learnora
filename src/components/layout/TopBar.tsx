@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Search, Bell, MessageSquare, Calendar, Menu, ChevronDown, User, Settings, LogOut } from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
+import ConfirmDialog from '../shared/ConfirmDialog'
 
 type SidebarUser = { name: string; role: string; initials: string }
 
@@ -11,22 +13,28 @@ type Props = {
   user?:        SidebarUser
 }
 
+// Role-aware top-bar destinations. null hides the icon for that role.
 function roleNav(role: string | undefined) {
-  const isTeacher    = role === 'Teacher'
-  const isAdmin      = role === 'School Admin'
-  const isSuperAdmin = role === 'Super Admin'
-  return {
-    notifications: isSuperAdmin ? 'super-notifications' : 'notifications',
-    messages:  isTeacher || isAdmin ? 'teacher-messages' : isSuperAdmin ? null : 'messages',
-    calendar:  isTeacher ? 'teacher-calendar' : isAdmin ? 'timetable' : isSuperAdmin ? null : 'calendar',
-    settings:  isTeacher ? 'teacher-settings' : isAdmin ? 'settings'  : isSuperAdmin ? 'platform-settings' : 'settings',
+  switch (role) {
+    case 'teacher':
+      return { notifications: 'notifications',        messages: 'teacher-messages', calendar: 'teacher-calendar', settings: 'teacher-settings'  }
+    case 'admin':
+      return { notifications: 'notifications',        messages: null,               calendar: 'timetable',        settings: 'settings'          }
+    case 'parent':
+      return { notifications: 'parent/notifications', messages: 'parent/chat',      calendar: 'parent/calendar',  settings: 'settings'          }
+    case 'super_admin':
+      return { notifications: 'super-notifications',  messages: null,               calendar: null,               settings: 'platform-settings' }
+    default: // student
+      return { notifications: 'notifications',        messages: 'messages',         calendar: 'calendar',         settings: 'settings'          }
   }
 }
 
 export default function TopBar({ title, subtitle, onMenuClick, onNavigate, user }: Props) {
+  const { profile, signOut } = useAuth()
   const [avatarOpen, setAvatarOpen] = useState(false)
+  const [logoutOpen, setLogoutOpen] = useState(false)
   const nav     = onNavigate ?? (() => {})
-  const routes  = roleNav(user?.role)
+  const routes  = roleNav(profile?.role)
 
   return (
     <header className="flex items-center gap-3 md:gap-4 px-4 md:px-8 py-4 md:py-5 bg-surface border-b border-black/6 relative z-20">
@@ -58,14 +66,16 @@ export default function TopBar({ title, subtitle, onMenuClick, onNavigate, user 
 
       {/* Action icons */}
       <div className="flex items-center gap-1 md:gap-2">
-        <button
-          onClick={() => nav(routes.notifications)}
-          className="relative p-2 text-muted hover:text-foreground transition-colors"
-          aria-label="Notifications"
-        >
-          <Bell size={20} />
-          <span className="absolute top-1.5 right-1.5 size-2 bg-red-500 rounded-full" />
-        </button>
+        {routes.notifications && (
+          <button
+            onClick={() => nav(routes.notifications!)}
+            className="relative p-2 text-muted hover:text-foreground transition-colors"
+            aria-label="Notifications"
+          >
+            <Bell size={20} />
+            <span className="absolute top-1.5 right-1.5 size-2 bg-red-500 rounded-full" />
+          </button>
+        )}
         {routes.messages && (
           <button
             onClick={() => nav(routes.messages!)}
@@ -111,28 +121,40 @@ export default function TopBar({ title, subtitle, onMenuClick, onNavigate, user 
                     <p className="text-xs text-muted truncate">{user.role}</p>
                   </div>
                 )}
-                {([
-                  { label: 'View Profile', icon: User,     page: 'profile-settings', danger: false },
-                  { label: 'Settings',     icon: Settings, page: routes.settings,    danger: false },
-                  { label: 'Log out',      icon: LogOut,   page: 'logout',           danger: true  },
-                ] satisfies { label: string; icon: typeof User; page: string; danger: boolean }[]).map(item => {
-                  const Icon = item.icon
-                  return (
-                    <button
-                      key={item.label}
-                      onClick={() => { setAvatarOpen(false); nav(item.page) }}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-canvas transition-colors text-left ${item.danger ? 'text-red-500' : 'text-foreground'}`}
-                    >
-                      <Icon size={14} className="shrink-0" />
-                      {item.label}
-                    </button>
-                  )
-                })}
+                <button
+                  onClick={() => { setAvatarOpen(false); nav('profile-settings') }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-canvas transition-colors text-left text-foreground"
+                >
+                  <User size={14} className="shrink-0" /> View Profile
+                </button>
+                <button
+                  onClick={() => { setAvatarOpen(false); nav(routes.settings) }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-canvas transition-colors text-left text-foreground"
+                >
+                  <Settings size={14} className="shrink-0" /> Settings
+                </button>
+                <button
+                  onClick={() => { setAvatarOpen(false); setLogoutOpen(true) }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-canvas transition-colors text-left text-red-500"
+                >
+                  <LogOut size={14} className="shrink-0" /> Log out
+                </button>
               </div>
             </>
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={logoutOpen}
+        title="Log out?"
+        body="You will be returned to the login screen. Any unsaved work may be lost."
+        confirmLabel="Log out"
+        cancelLabel="Stay"
+        danger
+        onConfirm={async () => { setLogoutOpen(false); await signOut(); nav('login') }}
+        onCancel={() => setLogoutOpen(false)}
+      />
     </header>
   )
 }

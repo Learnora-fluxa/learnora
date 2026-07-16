@@ -532,7 +532,6 @@ export default function App() {
           <Route path="/group-chat"           element={<GroupChatRoute />} />
           <Route path="/announcements"        element={<AnnouncementsRoute />} />
           <Route path="/ai-tutor"             element={<AITutorRoute />} />
-          <Route path="/notifications"        element={<NotifsRoute />} />
           <Route path="/live-classes"         element={<LiveClassesRoute />} />
           <Route path="/downloads"            element={<DownloadsRoute />} />
           <Route path="/student-timetable"    element={<StudentTimetableRoute />} />
@@ -574,6 +573,11 @@ export default function App() {
           <Route path="/m/lesson-complete"    element={<LessonCompleteRoute />} />
           <Route path="/m/settings"           element={<MStudentSettingsRoute />} />
           <Route path="/m/profile"            element={<MStudentProfileRoute />} />
+        </Route>
+
+        {/* ── Student + Teacher + Admin (in-app notifications) ──────── */}
+        <Route element={<RoleRoute roles={['student', 'teacher', 'admin']} />}>
+          <Route path="/notifications"        element={<NotifsRoute />} />
         </Route>
 
         {/* ── Student + Teacher (course content & classroom) ────────── */}

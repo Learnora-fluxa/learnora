@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Sparkles } from 'lucide-react'
 import Sidebar, { type NavItem } from './Sidebar'
 import TopBar from './TopBar'
+import { useAuth } from '../../contexts/AuthContext'
 
 type SidebarUser = { name: string; role: string; initials: string }
 
@@ -29,8 +30,13 @@ export default function DashboardLayout({
   mainClassName,
   aiPage: aiPageProp,
 }: Props) {
-  // Student pages omit nav (Sidebar defaults to studentNav); teacher/admin pages pass nav explicitly
-  const aiPage = aiPageProp ?? (nav === undefined ? 'ai-tutor' : 'ai-assistant')
+  const { profile } = useAuth()
+  // Only students and teachers have AI pages — hide the button for other roles
+  const roleAiPage =
+    profile?.role === 'student' ? 'ai-tutor'
+    : profile?.role === 'teacher' ? 'ai-assistant'
+    : null
+  const aiPage = aiPageProp ?? roleAiPage
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   function handleNavigate(page: string) {
@@ -76,16 +82,18 @@ export default function DashboardLayout({
         />
         <main className={`${mainClassName ?? 'flex-1 overflow-y-auto p-4 md:p-8'} relative`}>
           {children}
-          {/* Floating AI button */}
-          <button
-            onClick={() => handleNavigate(aiPage)}
-            aria-label="Open AI Assistant"
-            title="AI Assistant"
-            className="fixed bottom-8 right-8 z-50 flex items-center gap-2.5 h-12 px-5 bg-primary text-white text-sm font-semibold rounded-full shadow-lg hover:bg-primary-deep active:scale-95 transition-all"
-          >
-            <Sparkles size={16} className="shrink-0" />
-            AI Assistant
-          </button>
+          {/* Floating AI button — only for roles with an AI page */}
+          {aiPage && (
+            <button
+              onClick={() => handleNavigate(aiPage)}
+              aria-label="Open AI Assistant"
+              title="AI Assistant"
+              className="fixed bottom-8 right-8 z-50 flex items-center gap-2.5 h-12 px-5 bg-primary text-white text-sm font-semibold rounded-full shadow-lg hover:bg-primary-deep active:scale-95 transition-all"
+            >
+              <Sparkles size={16} className="shrink-0" />
+              AI Assistant
+            </button>
+          )}
         </main>
       </div>
     </div>

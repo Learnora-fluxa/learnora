@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { ChevronLeft, Play, CheckCircle2, Clock, BookOpen, Users, FileText, Download, Link, Video, File } from 'lucide-react'
 import DashboardLayout from '../components/layout/DashboardLayout'
+import { teacherNav } from '../components/layout/Sidebar'
 import { useAuth, profileToSidebarUser } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -161,6 +162,7 @@ export default function CourseDetailsPage({ onNavigate }: Props) {
       onNavigate={onNavigate}
       title="Course Details"
       subtitle={courseSubject ? `${courseTitle} — ${courseSubject}` : courseTitle}
+      nav={profile?.role === 'teacher' ? teacherNav : undefined}
       user={sidebarUser}
     >
       <div className="max-w-[1100px] flex flex-col gap-6">

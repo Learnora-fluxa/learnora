@@ -143,6 +143,17 @@ ParticipantsPanelPage, ScreenSharePage, AddEventPage
 - **SQL:** `ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS daily_room_name TEXT;` ✅ Confirmed run
 - **Edge Function:** `npx supabase functions deploy daily-token` ✅ Deployed to project `njriewvlsufzvxgfpzkg`
 
+### RBAC leak sweep + Live Classes hardening ✅ DONE (2026-07-16)
+- **TopBar** rewritten role-aware (was matching display-label strings): bell/messages/calendar/settings now map per actual `profile.role`; icons hidden for roles with no destination; "Log out" in avatar dropdown now actually calls `signOut()` (was navigating to /logout leaving the session alive)
+- **DashboardLayout AI button**: only rendered for student (→ ai-tutor) and teacher (→ ai-assistant); hidden for admin/parent/super_admin (they were being bounced by RoleRoute — the "AI page problem")
+- **/notifications** moved to `['student','teacher','admin']` group (page already picks role nav internally)
+- **CourseDetailsPage / CourseResourcesPage / SharedFilesPage / GlobalSearchPage / NotificationDetailsPage**: now pass role-appropriate nav (teachers/admins were seeing the student sidebar)
+- **Live classes fixes**:
+  - `functionErrorMessage()` in `supabaseError.ts` — extracts the real error body from failed `functions.invoke()` (was swallowed; users only saw generic messages)
+  - `LiveClassRoomPage`: `Daily.getCallInstance() ?? createCallObject()` (fixes "Duplicate DailyIframe instances" crash on StrictMode remount / quick re-entry); join `.catch()` + `error` event listener → visible error overlay with Back button (was spinning forever)
+  - "Session not found" fallback back-button now role-aware
+- Verified backend: `daily-token` deployed ✅, `DAILY_API_KEY` secret set ✅, `daily_room_name` column exists ✅
+
 ### Role-Based Access Control ✅ DONE (2026-07-11)
 - **`RoleRoute`** component in `App.tsx` — accepts `roles: string[]`; wrong-role users redirected to their own dashboard (not to `/login`)
 - **`getDashboardPath(role)`** helper in `App.tsx` — single source of truth for post-login + wrong-role redirects

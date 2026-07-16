@@ -32,21 +32,24 @@ export default function LiveClassRoomPage({ onNavigate }: Props) {
   const roomUrl = sessionStorage.getItem('learnora_daily_room_url') ?? ''
   const token   = sessionStorage.getItem('learnora_daily_token')   ?? ''
 
-  const [callObject] = useState<DailyCall>(() => Daily.createCallObject())
+  // Reuse an existing instance if one survives (StrictMode remount / quick re-entry) —
+  // Daily throws "Duplicate DailyIframe instances" if we blindly create a second one.
+  const [callObject] = useState<DailyCall>(() => Daily.getCallInstance() ?? Daily.createCallObject())
 
   useEffect(() => {
     return () => {
-      callObject.leave().catch(() => {}).finally(() => callObject.destroy())
+      callObject.leave().catch(() => {}).finally(() => callObject.destroy().catch(() => {}))
     }
   }, [callObject])
 
   if (!roomUrl || !token) {
+    const wasTeacher = sessionStorage.getItem('learnora_session_is_teacher') === 'true'
     return (
       <div className="h-screen bg-[#0a0f1e] flex items-center justify-center">
         <div className="text-center">
           <p className="text-white/60 text-sm mb-4">Session not found. Please go back and start again.</p>
           <button
-            onClick={() => onNavigate('teacher-live-classes')}
+            onClick={() => onNavigate(wasTeacher ? 'teacher-live-classes' : 'live-classes')}
             className="h-10 px-6 bg-primary text-white text-sm font-semibold rounded-pill"
           >
             Back to Live Classes
@@ -97,6 +100,7 @@ function LiveRoomInner({
   const [msg,     setMsg]     = useState('')
   const [msgs,    setMsgs]    = useState<ChatMsg[]>([])
   const [mode,    setMode]    = useState<'gallery' | 'screenshare' | 'whiteboard'>('gallery')
+  const [joinError, setJoinError] = useState('')
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   const camOn = localId ? !localVideo.isOff : initCamOn
@@ -114,8 +118,20 @@ function LiveRoomInner({
       token,
       startVideoOff: !initCamOn,
       startAudioOff: !initMicOn,
+    }).catch((e: unknown) => {
+      setJoinError(e instanceof Error ? e.message : 'Could not connect to the class.')
     })
   }, [daily, meetingState])
+
+  // Surface fatal call errors (expired room, invalid token, network) instead of spinning forever
+  useEffect(() => {
+    if (!daily) return
+    const onError = (ev?: { errorMsg?: string }) => {
+      setJoinError(ev?.errorMsg ?? 'The connection to the class failed.')
+    }
+    daily.on('error', onError)
+    return () => { daily.off('error', onError) }
+  }, [daily])
 
   // Scroll chat to bottom on new message
   useEffect(() => {
@@ -212,8 +228,24 @@ function LiveRoomInner({
         <span className="text-white/40 text-xs">{allParticipantIds.length} in call</span>
       </div>
 
+      {/* Join error overlay */}
+      {joinError && (
+        <div className="absolute inset-0 z-50 bg-[#0a0f1e]/95 flex items-center justify-center p-6">
+          <div className="text-center max-w-md">
+            <p className="text-red-400 text-sm font-semibold mb-2">Could not join the class</p>
+            <p className="text-white/60 text-xs mb-5 break-words">{joinError}</p>
+            <button
+              onClick={() => onNavigate(backPage)}
+              className="h-10 px-6 bg-primary text-white text-sm font-semibold rounded-pill"
+            >
+              Back to Live Classes
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Joining overlay */}
-      {isJoining && (
+      {isJoining && !joinError && (
         <div className="absolute inset-0 z-50 bg-[#0a0f1e]/90 flex items-center justify-center">
           <div className="text-center">
             <div className="size-12 rounded-full border-2 border-primary border-t-transparent animate-spin mx-auto mb-4" />

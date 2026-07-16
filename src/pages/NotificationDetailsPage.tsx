@@ -1,15 +1,25 @@
 import { ChevronLeft, BookOpen, Clock } from 'lucide-react'
 import DashboardLayout from '../components/layout/DashboardLayout'
+import { teacherNav, adminNav, superAdminNav } from '../components/layout/Sidebar'
+import { useAuth, profileToSidebarUser } from '../contexts/AuthContext'
 
 type Props = { onNavigate: (page: string) => void }
 
 export default function NotificationDetailsPage({ onNavigate }: Props) {
+  const { profile } = useAuth()
   return (
     <DashboardLayout
       activePage="notifications"
       onNavigate={onNavigate}
       title="Notification"
       subtitle="Assignment due reminder"
+      nav={
+        profile?.role === 'teacher'     ? teacherNav
+        : profile?.role === 'admin'       ? adminNav
+        : profile?.role === 'super_admin' ? superAdminNav
+        : undefined
+      }
+      user={profileToSidebarUser(profile)}
     >
       <div className="max-w-[700px] flex flex-col gap-6">
 
