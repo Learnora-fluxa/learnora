@@ -289,6 +289,7 @@ export type Database = {
           id: string
           marked_at: string | null
           school_id: string
+          source: string | null
           status: string | null
           student_id: string
           subject_id: string | null
@@ -301,6 +302,7 @@ export type Database = {
           id?: string
           marked_at?: string | null
           school_id: string
+          source?: string | null
           status?: string | null
           student_id: string
           subject_id?: string | null
@@ -313,6 +315,7 @@ export type Database = {
           id?: string
           marked_at?: string | null
           school_id?: string
+          source?: string | null
           status?: string | null
           student_id?: string
           subject_id?: string | null
@@ -2138,6 +2141,93 @@ export type Database = {
           },
         ]
       }
+      cbt_exams: {
+        Row: {
+          class_id: string
+          created_at: string | null
+          duration_minutes: number
+          id: string
+          instructions: string | null
+          lesson_id: string | null
+          randomize: boolean | null
+          scheduled_at: string | null
+          school_id: string
+          status: string | null
+          subject_id: string | null
+          teacher_id: string
+          title: string
+        }
+        Insert: {
+          class_id: string
+          created_at?: string | null
+          duration_minutes?: number
+          id?: string
+          instructions?: string | null
+          lesson_id?: string | null
+          randomize?: boolean | null
+          scheduled_at?: string | null
+          school_id: string
+          status?: string | null
+          subject_id?: string | null
+          teacher_id: string
+          title: string
+        }
+        Update: {
+          class_id?: string
+          created_at?: string | null
+          duration_minutes?: number
+          id?: string
+          instructions?: string | null
+          lesson_id?: string | null
+          randomize?: boolean | null
+          scheduled_at?: string | null
+          school_id?: string
+          status?: string | null
+          subject_id?: string | null
+          teacher_id?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      cbt_attempts: {
+        Row: {
+          answers: unknown | null
+          auto_submitted: boolean | null
+          exam_id: string
+          id: string
+          max_score: number | null
+          school_id: string
+          score: number | null
+          started_at: string | null
+          student_id: string
+          submitted_at: string | null
+        }
+        Insert: {
+          answers?: unknown | null
+          auto_submitted?: boolean | null
+          exam_id: string
+          id?: string
+          max_score?: number | null
+          school_id: string
+          score?: number | null
+          started_at?: string | null
+          student_id: string
+          submitted_at?: string | null
+        }
+        Update: {
+          answers?: unknown | null
+          auto_submitted?: boolean | null
+          exam_id?: string
+          id?: string
+          max_score?: number | null
+          school_id?: string
+          score?: number | null
+          started_at?: string | null
+          student_id?: string
+          submitted_at?: string | null
+        }
+        Relationships: []
+      }
       email_templates: {
         Row: {
           body: string
@@ -2175,6 +2265,7 @@ export type Database = {
         Row: {
           created_at: string | null
           created_by: string | null
+          exam_id: string | null
           explanation: string | null
           id: string
           lesson_id: string | null
@@ -2188,6 +2279,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           created_by?: string | null
+          exam_id?: string | null
           explanation?: string | null
           id?: string
           lesson_id?: string | null
@@ -2201,6 +2293,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           created_by?: string | null
+          exam_id?: string | null
           explanation?: string | null
           id?: string
           lesson_id?: string | null

@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { logSupabaseError } from '../lib/supabaseError'
 
 type Props = { onNavigate: (page: string) => void }
 type Panel = 'chat' | 'participants' | null
@@ -101,7 +102,9 @@ function LiveRoomInner({
   const [msgs,    setMsgs]    = useState<ChatMsg[]>([])
   const [mode,    setMode]    = useState<'gallery' | 'screenshare' | 'whiteboard'>('gallery')
   const [joinError, setJoinError] = useState('')
-  const chatEndRef = useRef<HTMLDivElement>(null)
+  const [raisedHands, setRaisedHands] = useState<Record<string, string>>({})  // daily sessionId -> participant name
+  const chatEndRef      = useRef<HTMLDivElement>(null)
+  const attendanceMarked = useRef(false)
 
   const camOn = localId ? !localVideo.isOff : initCamOn
   const micOn = localId ? !localAudio.isOff : initMicOn
@@ -133,6 +136,38 @@ function LiveRoomInner({
     return () => { daily.off('error', onError) }
   }, [daily])
 
+  // Auto-attendance: mark the student present once they actually join the call.
+  // Teachers can override it later from In-Class Attendance (their save wins).
+  useEffect(() => {
+    if (meetingState !== 'joined-meeting' || isTeacher || attendanceMarked.current) return
+    if (!profile?.id || !profile.school_id) return
+    const classId = sessionStorage.getItem('learnora_session_class_id') ?? ''
+    if (!classId) return
+    attendanceMarked.current = true
+    const today = new Date().toISOString().split('T')[0]
+    ;(async () => {
+      // Only write if the teacher hasn't already marked this student today
+      const { data: existing } = await supabase
+        .from('attendance_records')
+        .select('id')
+        .eq('student_id', profile.id)
+        .eq('class_id', classId)
+        .eq('date', today)
+        .maybeSingle()
+      if (existing) return
+      const { error: err } = await supabase.from('attendance_records').insert({
+        school_id:  profile.school_id!,
+        class_id:   classId,
+        student_id: profile.id,
+        date:       today,
+        status:     'present',
+        source:     'live_auto',
+        marked_at:  new Date().toISOString(),
+      })
+      if (err) logSupabaseError('LiveRoom/autoAttendance', err)
+    })()
+  }, [meetingState, isTeacher, profile?.id])
+
   // Scroll chat to bottom on new message
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -144,18 +179,42 @@ function LiveRoomInner({
     else if (mode === 'screenshare') setMode('gallery')
   }, [screens.length])
 
-  // Receive chat messages and get sender function
+  // Receive chat + raise-hand messages; returned function broadcasts to the room
   const sendMsg = useAppMessage({
-    onAppMessage: useCallback((evt: { data: { type?: string; text?: string; sender?: string } }) => {
-      if (evt.data?.type !== 'chat') return
-      const now = new Date()
-      setMsgs(prev => [...prev, {
-        sender: evt.data.sender ?? 'Participant',
-        time:   `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`,
-        text:   evt.data.text ?? '',
-      }])
+    onAppMessage: useCallback((evt: { data: { type?: string; text?: string; sender?: string; raised?: boolean; sid?: string } }) => {
+      if (evt.data?.type === 'chat') {
+        const now = new Date()
+        setMsgs(prev => [...prev, {
+          sender: evt.data.sender ?? 'Participant',
+          time:   `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`,
+          text:   evt.data.text ?? '',
+        }])
+        return
+      }
+      if (evt.data?.type === 'hand' && evt.data.sid) {
+        const { sid, raised: isUp, sender } = evt.data
+        setRaisedHands(prev => {
+          const n = { ...prev }
+          if (isUp) n[sid] = sender ?? 'Participant'
+          else delete n[sid]
+          return n
+        })
+      }
     }, []),
   })
+
+  function toggleHand() {
+    if (!localId) return
+    const next = !raised
+    setRaised(next)
+    setRaisedHands(prev => {
+      const n = { ...prev }
+      if (next) n[localId] = profile?.full_name ?? 'You'
+      else delete n[localId]
+      return n
+    })
+    sendMsg({ type: 'hand', raised: next, sid: localId, sender: profile?.full_name ?? 'Participant' }, '*')
+  }
 
   function handleSend() {
     const text = msg.trim()
@@ -225,7 +284,14 @@ function LiveRoomInner({
             </button>
           ))}
         </div>
-        <span className="text-white/40 text-xs">{allParticipantIds.length} in call</span>
+        <div className="flex items-center gap-3">
+          {Object.keys(raisedHands).length > 0 && (
+            <span className="flex items-center gap-1.5 text-xs font-bold text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-full">
+              <Hand size={11} /> {Object.keys(raisedHands).length}
+            </span>
+          )}
+          <span className="text-white/40 text-xs">{allParticipantIds.length} in call</span>
+        </div>
       </div>
 
       {/* Join error overlay */}
@@ -274,6 +340,7 @@ function LiveRoomInner({
                       sessionId={id}
                       isLocal={id === localId}
                       color={tileColors[i % tileColors.length]}
+                      handRaised={!!raisedHands[id]}
                     />
                   ))}
                 </div>
@@ -395,7 +462,7 @@ function LiveRoomInner({
             {panel === 'participants' && (
               <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
                 {allParticipantIds.map((id, i) => (
-                  <ParticipantRow key={id} sessionId={id} isLocal={id === localId} color={tileColors[i % tileColors.length]} />
+                  <ParticipantRow key={id} sessionId={id} isLocal={id === localId} color={tileColors[i % tileColors.length]} handRaised={!!raisedHands[id]} />
                 ))}
               </div>
             )}
@@ -445,7 +512,7 @@ function LiveRoomInner({
           <span className="text-[9px] text-white/50">Board</span>
         </button>
         <button
-          onClick={() => setRaised(!raised)}
+          onClick={toggleHand}
           className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-colors ${raised ? 'bg-amber-500/30' : 'hover:bg-white/8'}`}
         >
           <Hand size={20} className={raised ? 'text-amber-400' : 'text-white'} />
@@ -487,14 +554,14 @@ function LiveRoomInner({
 
 // ── Participant video tile ─────────────────────────────────────────────────────
 
-function ParticipantTile({ sessionId, isLocal, color }: { sessionId: string; isLocal: boolean; color: string }) {
+function ParticipantTile({ sessionId, isLocal, color, handRaised }: { sessionId: string; isLocal: boolean; color: string; handRaised?: boolean }) {
   const videoTrack = useVideoTrack(sessionId)
   const audioTrack = useAudioTrack(sessionId)
   const camOn = !videoTrack.isOff
   const micOn = !audioTrack.isOff
 
   return (
-    <div className="relative bg-[#1a2035] rounded-xl overflow-hidden flex items-center justify-center">
+    <div className={`relative bg-[#1a2035] rounded-xl overflow-hidden flex items-center justify-center ${handRaised ? 'ring-2 ring-amber-400' : ''}`}>
       {camOn ? (
         <DailyVideo
           sessionId={sessionId}
@@ -508,6 +575,11 @@ function ParticipantTile({ sessionId, isLocal, color }: { sessionId: string; isL
           {sessionId.substring(0, 2).toUpperCase()}
         </div>
       )}
+      {handRaised && (
+        <span className="absolute top-2 right-2 bg-amber-400 text-black rounded-full p-1.5 shadow">
+          <Hand size={12} />
+        </span>
+      )}
       <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
         <span className="text-white text-[11px] font-semibold bg-black/50 px-2 py-0.5 rounded-full truncate">
           {isLocal ? 'You' : 'Participant'}
@@ -520,7 +592,7 @@ function ParticipantTile({ sessionId, isLocal, color }: { sessionId: string; isL
 
 // ── Participant row (side panel) ───────────────────────────────────────────────
 
-function ParticipantRow({ sessionId, isLocal, color }: { sessionId: string; isLocal: boolean; color: string }) {
+function ParticipantRow({ sessionId, isLocal, color, handRaised }: { sessionId: string; isLocal: boolean; color: string; handRaised?: boolean }) {
   const videoTrack = useVideoTrack(sessionId)
   const audioTrack = useAudioTrack(sessionId)
   const camOn = !videoTrack.isOff
@@ -538,6 +610,7 @@ function ParticipantRow({ sessionId, isLocal, color }: { sessionId: string; isLo
         </p>
       </div>
       <div className="flex items-center gap-1.5">
+        {handRaised && <Hand size={11} className="text-amber-400" />}
         {micOn ? <Mic size={11} className="text-white/40" /> : <MicOff size={11} className="text-red-400" />}
         {camOn ? <Video size={11} className="text-white/40" /> : <VideoOff size={11} className="text-red-400" />}
       </div>

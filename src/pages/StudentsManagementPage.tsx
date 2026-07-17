@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Search, ChevronDown, Users, BookOpen, ClipboardList, TrendingUp } from 'lucide-react'
+import { Search, ChevronDown, Users, BookOpen, ClipboardList, TrendingUp, ArrowUpRight } from 'lucide-react'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import { teacherNav } from '../components/layout/Sidebar'
+import PromoteStudentsModal from '../components/shared/PromoteStudentsModal'
 import { useAuth, profileToSidebarUser } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -33,6 +34,8 @@ export default function StudentsManagementPage({ onNavigate }: Props) {
   const [error,       setError]       = useState('')
   const [search,      setSearch]      = useState('')
   const [classFilter, setClassFilter] = useState('All')
+  const [selected,    setSelected]    = useState<Set<string>>(new Set())
+  const [promoteOpen, setPromoteOpen] = useState(false)
 
   useEffect(() => { if (profile?.id) loadStudents() }, [profile?.id])
 
@@ -84,6 +87,25 @@ export default function StudentsManagementPage({ onNavigate }: Props) {
     (classFilter === 'All' || s.className === classFilter) &&
     s.name.toLowerCase().includes(search.toLowerCase())
   )
+
+  function toggleSelect(id: string) {
+    setSelected(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
+    })
+  }
+
+  function toggleSelectAll() {
+    setSelected(prev =>
+      prev.size === filtered.length ? new Set() : new Set(filtered.map(s => s.id))
+    )
+  }
+
+  const selectedStudents = students
+    .filter(s => selected.has(s.id))
+    .filter((s, i, arr) => arr.findIndex(x => x.id === s.id) === i)
+    .map(s => ({ id: s.id, name: s.name }))
 
   return (
     <DashboardLayout
@@ -141,6 +163,14 @@ export default function StudentsManagementPage({ onNavigate }: Props) {
             </select>
             <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
           </div>
+          {selected.size > 0 && (
+            <button
+              onClick={() => setPromoteOpen(true)}
+              className="flex items-center gap-1.5 h-11 px-5 bg-primary text-white text-sm font-semibold rounded-pill hover:bg-primary-deep transition-colors shadow-primary"
+            >
+              <ArrowUpRight size={14} /> Promote ({selected.size})
+            </button>
+          )}
         </div>
 
         {error && <p className="text-sm text-red-500">{error}</p>}
@@ -151,6 +181,15 @@ export default function StudentsManagementPage({ onNavigate }: Props) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-black/6 bg-canvas/60">
+                  <th className="px-4 py-4 w-10">
+                    <input
+                      type="checkbox"
+                      checked={filtered.length > 0 && selected.size === filtered.length}
+                      onChange={toggleSelectAll}
+                      className="size-4 accent-primary"
+                      aria-label="Select all students"
+                    />
+                  </th>
                   <th className="text-left px-6 py-4 text-xs font-semibold text-muted uppercase tracking-wider">Student</th>
                   <th className="text-left px-6 py-4 text-xs font-semibold text-muted uppercase tracking-wider">Class</th>
                   <th className="text-left px-6 py-4 text-xs font-semibold text-muted uppercase tracking-wider">Email</th>
@@ -159,11 +198,20 @@ export default function StudentsManagementPage({ onNavigate }: Props) {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={4} className="px-6 py-10 text-center text-sm text-muted">Loading…</td></tr>
+                  <tr><td colSpan={5} className="px-6 py-10 text-center text-sm text-muted">Loading…</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={4} className="px-6 py-10 text-center text-sm text-muted">No students found.</td></tr>
+                  <tr><td colSpan={5} className="px-6 py-10 text-center text-sm text-muted">No students found.</td></tr>
                 ) : filtered.map(s => (
                   <tr key={s.id} className="border-b border-black/4 last:border-0 hover:bg-canvas/40 transition-colors">
+                    <td className="px-4 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(s.id)}
+                        onChange={() => toggleSelect(s.id)}
+                        className="size-4 accent-primary"
+                        aria-label={`Select ${s.name}`}
+                      />
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <Avatar name={s.name} />
@@ -192,6 +240,13 @@ export default function StudentsManagementPage({ onNavigate }: Props) {
         </div>
 
       </div>
+
+      <PromoteStudentsModal
+        open={promoteOpen}
+        students={selectedStudents}
+        onClose={() => setPromoteOpen(false)}
+        onDone={() => { setSelected(new Set()); loadStudents() }}
+      />
     </DashboardLayout>
   )
 }

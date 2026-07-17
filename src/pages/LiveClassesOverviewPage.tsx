@@ -16,6 +16,7 @@ interface LiveSession {
   durationMinutes:  number
   status:           'upcoming' | 'live' | 'ended'
   classId:          string
+  className:        string
 }
 
 const subjectColor: Record<string, string> = {
@@ -75,7 +76,7 @@ export default function LiveClassesOverviewPage({ onNavigate }: Props) {
     // Query live + upcoming sessions, plus recent ended ones
     const { data, error: err } = await supabase
       .from('live_sessions')
-      .select('id, topic, scheduled_at, duration_minutes, status, class_id, profiles!teacher_id(full_name), subjects(name)')
+      .select('id, topic, scheduled_at, duration_minutes, status, class_id, profiles!teacher_id(full_name), subjects(name), classes!class_id(name)')
       .in('class_id', classIds)
       .order('scheduled_at', { ascending: false })
       .limit(20)
@@ -96,6 +97,7 @@ export default function LiveClassesOverviewPage({ onNavigate }: Props) {
       class_id: string
       profiles: { full_name: string | null } | null
       subjects: { name: string } | null
+      classes: { name: string } | null
     }
 
     setSessions(((data ?? []) as unknown as Raw[]).map(r => ({
@@ -107,6 +109,7 @@ export default function LiveClassesOverviewPage({ onNavigate }: Props) {
       durationMinutes: r.duration_minutes,
       status:          r.status,
       classId:         r.class_id,
+      className:       r.classes?.name ?? '',
     })))
 
     setLoading(false)
@@ -132,7 +135,8 @@ export default function LiveClassesOverviewPage({ onNavigate }: Props) {
     sessionStorage.setItem('learnora_daily_token',        data.token)
     sessionStorage.setItem('learnora_daily_room_url',     data.room_url)
     sessionStorage.setItem('learnora_session_topic',      session.topic)
-    sessionStorage.setItem('learnora_session_class',      session.classId)
+    sessionStorage.setItem('learnora_session_class',      session.className)
+    sessionStorage.setItem('learnora_session_class_id',   session.classId)
     sessionStorage.setItem('learnora_session_is_teacher', 'false')
     onNavigate('pre-class-lobby')
   }

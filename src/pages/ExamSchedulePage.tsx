@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Calendar, BookOpen, AlertCircle } from 'lucide-react'
+import { Calendar, BookOpen, AlertCircle, MonitorCheck, Clock, CheckCircle2 } from 'lucide-react'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import { useAuth, profileToSidebarUser } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -16,6 +16,16 @@ interface Exam {
   due:     Date
   past:    boolean
   color:   string
+}
+
+interface CbtExam {
+  id:               string
+  title:            string
+  subject:          string
+  duration_minutes: number
+  taken:            boolean
+  score:            number | null
+  max_score:        number | null
 }
 
 const COLORS = [
@@ -35,10 +45,39 @@ export default function ExamSchedulePage({ onNavigate }: Props) {
   const sidebarUser  = profileToSidebarUser(profile)
 
   const [exams,     setExams]     = useState<Exam[]>([])
+  const [cbtExams,  setCbtExams]  = useState<CbtExam[]>([])
   const [showPast,  setShowPast]  = useState(false)
   const [loading,   setLoading]   = useState(true)
 
   useEffect(() => { if (profile?.id) loadExams() }, [profile?.id])
+
+  async function loadCbtExams(classIds: string[]) {
+    const [examRes, attemptRes] = await Promise.all([
+      supabase.from('cbt_exams')
+        .select('id, title, duration_minutes, subjects!subject_id(name)')
+        .eq('status', 'published')
+        .in('class_id', classIds)
+        .order('created_at', { ascending: false }),
+      supabase.from('cbt_attempts')
+        .select('exam_id, score, max_score, submitted_at')
+        .eq('student_id', profile!.id),
+    ])
+
+    type ERaw = { id: string; title: string; duration_minutes: number; subjects: { name: string } | null }
+    type ARaw = { exam_id: string; score: number | null; max_score: number | null; submitted_at: string | null }
+    const attempts: Record<string, ARaw> = {}
+    for (const a of (attemptRes.data ?? []) as ARaw[]) attempts[a.exam_id] = a
+
+    setCbtExams(((examRes.data ?? []) as unknown as ERaw[]).map(e => ({
+      id:               e.id,
+      title:            e.title,
+      subject:          e.subjects?.name ?? '—',
+      duration_minutes: e.duration_minutes,
+      taken:            !!attempts[e.id]?.submitted_at,
+      score:            attempts[e.id]?.score ?? null,
+      max_score:        attempts[e.id]?.max_score ?? null,
+    })))
+  }
 
   async function loadExams() {
     setLoading(true)
@@ -52,6 +91,8 @@ export default function ExamSchedulePage({ onNavigate }: Props) {
 
     const classIds = (ceData ?? []).map((r: any) => r.class_id)
     if (classIds.length === 0) { setLoading(false); return }
+
+    await loadCbtExams(classIds)
 
     const { data } = await supabase
       .from('assignments')
@@ -123,6 +164,51 @@ export default function ExamSchedulePage({ onNavigate }: Props) {
           <AlertCircle size={15} className="shrink-0 mt-0.5 text-amber-600" />
           <p>Submit assignments on time. Late submissions may affect your grade. Check individual assignments for specific instructions.</p>
         </div>
+
+        {/* CBT exams */}
+        {cbtExams.length > 0 && (
+          <div className="flex flex-col gap-3">
+            <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+              <MonitorCheck size={16} className="text-primary" /> CBT Exams
+            </h2>
+            {cbtExams.map(e => {
+              const pct = e.taken && e.max_score && e.max_score > 0 ? Math.round(((e.score ?? 0) / e.max_score) * 100) : null
+              return (
+                <div key={e.id} className="bg-surface rounded-card shadow-sm p-5 flex flex-wrap items-center gap-4">
+                  <div className="size-10 rounded-card bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <MonitorCheck size={16} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-foreground">{e.title}</p>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted flex-wrap">
+                      <span>{e.subject}</span>
+                      <span className="flex items-center gap-1"><Clock size={10} /> {e.duration_minutes} min</span>
+                    </div>
+                  </div>
+                  {e.taken ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <CheckCircle2 size={14} className="text-green-600" />
+                      <span className="text-sm font-bold text-foreground">{e.score} / {e.max_score}</span>
+                      {pct != null && (
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pct >= 70 ? 'bg-green-50 text-green-700' : pct >= 50 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-600'}`}>{pct}%</span>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        sessionStorage.setItem('learnora_cbt_exam_id', e.id)
+                        onNavigate('cbt-exam')
+                      }}
+                      className="shrink-0 h-9 px-5 bg-primary text-white text-sm font-bold rounded-pill hover:bg-primary-deep transition-colors shadow-primary"
+                    >
+                      Start Exam
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* Tab toggle */}
         <div className="flex gap-2">

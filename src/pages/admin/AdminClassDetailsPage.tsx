@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Users, BookOpen, ClipboardCheck, TrendingUp, UserPlus } from 'lucide-react'
+import { ArrowLeft, Users, BookOpen, ClipboardCheck, TrendingUp, UserPlus, ArrowUpRight } from 'lucide-react'
 import DashboardLayout from '../../components/layout/DashboardLayout'
 import { adminNav } from '../../components/layout/Sidebar'
+import PromoteStudentsModal from '../../components/shared/PromoteStudentsModal'
 import { useAuth, profileToSidebarUser } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 
@@ -28,6 +29,8 @@ export default function AdminClassDetailsPage({ onNavigate }: Props) {
 
   const [students,        setStudents]        = useState<StudentRow[]>([])
   const [loadingStudents, setLoadingStudents] = useState(true)
+  const [selected,        setSelected]        = useState<Set<string>>(new Set())
+  const [promoteOpen,     setPromoteOpen]     = useState(false)
 
   useEffect(() => {
     if (cls?.id) loadStudents(cls.id)
@@ -190,11 +193,21 @@ export default function AdminClassDetailsPage({ onNavigate }: Props) {
 
         {/* Students table */}
         <div className="bg-surface rounded-card shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-black/6 flex items-center justify-between">
+          <div className="px-6 py-4 border-b border-black/6 flex items-center justify-between gap-3 flex-wrap">
             <h3 className="text-base font-bold text-foreground flex items-center gap-2">
               <Users size={15} className="text-primary" /> Enrolled Students
             </h3>
-            <span className="text-xs text-muted">{students.length} student{students.length !== 1 ? 's' : ''}</span>
+            <div className="flex items-center gap-3">
+              {selected.size > 0 && (
+                <button
+                  onClick={() => setPromoteOpen(true)}
+                  className="flex items-center gap-1.5 h-8 px-4 bg-primary text-white text-xs font-semibold rounded-pill hover:bg-primary-deep transition-colors"
+                >
+                  <ArrowUpRight size={12} /> Promote ({selected.size})
+                </button>
+              )}
+              <span className="text-xs text-muted">{students.length} student{students.length !== 1 ? 's' : ''}</span>
+            </div>
           </div>
 
           {loadingStudents ? (
@@ -215,6 +228,15 @@ export default function AdminClassDetailsPage({ onNavigate }: Props) {
               <table className="w-full text-sm min-w-[500px]">
                 <thead>
                   <tr className="border-b border-black/6 bg-canvas/40">
+                    <th className="px-4 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={students.length > 0 && selected.size === students.length}
+                        onChange={() => setSelected(prev => prev.size === students.length ? new Set() : new Set(students.map(s => s.id)))}
+                        className="size-4 accent-primary"
+                        aria-label="Select all students"
+                      />
+                    </th>
                     {['Student', 'Avg Score', 'Attendance', 'Status'].map(h => (
                       <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-muted uppercase tracking-wider">{h}</th>
                     ))}
@@ -225,6 +247,19 @@ export default function AdminClassDetailsPage({ onNavigate }: Props) {
                     const label = statusLabel(s.avgScore)
                     return (
                       <tr key={s.id} className="hover:bg-canvas/40 transition-colors">
+                        <td className="px-4 py-3.5">
+                          <input
+                            type="checkbox"
+                            checked={selected.has(s.id)}
+                            onChange={() => setSelected(prev => {
+                              const n = new Set(prev)
+                              if (n.has(s.id)) n.delete(s.id); else n.add(s.id)
+                              return n
+                            })}
+                            className="size-4 accent-primary"
+                            aria-label={`Select ${s.full_name ?? 'student'}`}
+                          />
+                        </td>
                         <td className="px-5 py-3.5">
                           <div className="flex items-center gap-2.5">
                             <div className="size-7 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0">
@@ -265,6 +300,13 @@ export default function AdminClassDetailsPage({ onNavigate }: Props) {
         </div>
 
       </div>
+
+      <PromoteStudentsModal
+        open={promoteOpen}
+        students={students.filter(s => selected.has(s.id)).map(s => ({ id: s.id, name: s.full_name ?? 'Unnamed' }))}
+        onClose={() => setPromoteOpen(false)}
+        onDone={() => { setSelected(new Set()); if (cls?.id) loadStudents(cls.id) }}
+      />
     </DashboardLayout>
   )
 }

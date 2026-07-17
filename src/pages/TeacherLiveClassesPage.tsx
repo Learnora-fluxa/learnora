@@ -13,6 +13,7 @@ interface Session {
   id:               string
   topic:            string
   subject_name:     string
+  class_id:         string
   class_name:       string
   scheduled_at:     string
   duration_minutes: number
@@ -75,6 +76,7 @@ export default function TeacherLiveClassesPage({ onNavigate }: Props) {
       id:               r.id,
       topic:            r.topic,
       subject_name:     r.subjects?.name ?? '—',
+      class_id:         r.classes?.id ?? '',
       class_name:       r.classes?.name ?? '—',
       scheduled_at:     r.scheduled_at,
       duration_minutes: r.duration_minutes ?? 60,
@@ -107,6 +109,7 @@ export default function TeacherLiveClassesPage({ onNavigate }: Props) {
     sessionStorage.setItem('learnora_daily_room_url',   data.room_url)
     sessionStorage.setItem('learnora_session_topic',    session.topic)
     sessionStorage.setItem('learnora_session_class',    session.class_name)
+    sessionStorage.setItem('learnora_session_class_id', session.class_id)
     sessionStorage.setItem('learnora_session_is_teacher', 'true')
     onNavigate('pre-class-lobby')
   }

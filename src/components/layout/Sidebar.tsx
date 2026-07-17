@@ -29,6 +29,7 @@ import {
   ToggleLeft,
   Mail,
   Award,
+  MonitorCheck,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -98,6 +99,7 @@ export const teacherNav: NavItem[] = [
   { label: 'Assignments',   icon: PenLine,         page: 'teacher-assignments'   },
   { label: 'Attendance',    icon: ClipboardCheck,  page: 'attendance'            },
   { label: 'Examinations',  icon: FileText,        page: 'examinations'          },
+  { label: 'CBT Exams',     icon: MonitorCheck,    page: 'cbt-exams'             },
   { label: 'Gradebook',     icon: BarChart3,       page: 'gradebook'             },
   { label: 'Analytics',     icon: TrendingUp,      page: 'analytics'             },
   { label: 'Performance',   icon: BarChart2,       page: 'class-performance'     },

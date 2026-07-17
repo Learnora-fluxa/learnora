@@ -19,6 +19,7 @@ interface StudentRecord {
   id:     string
   name:   string
   status: Status
+  auto:   boolean   // marked automatically when the student joined the live class
 }
 
 export default function InClassAttendancePage({ onNavigate }: Props) {
@@ -69,26 +70,42 @@ export default function InClassAttendancePage({ onNavigate }: Props) {
   async function loadStudents() {
     setLoadingStudents(true)
     setSaved(false)
-    const { data } = await supabase
-      .from('class_enrollments')
-      .select('student_id, profiles!student_id(id, full_name, email)')
-      .eq('class_id', selectedClassId)
+    const today = new Date().toISOString().split('T')[0]
 
-    const raw = (data ?? []) as unknown as {
+    const [enrollRes, existingRes] = await Promise.all([
+      supabase
+        .from('class_enrollments')
+        .select('student_id, profiles!student_id(id, full_name, email)')
+        .eq('class_id', selectedClassId),
+      supabase
+        .from('attendance_records')
+        .select('student_id, status, source')
+        .eq('class_id', selectedClassId)
+        .eq('date', today),
+    ])
+
+    const raw = (enrollRes.data ?? []) as unknown as {
       student_id: string
       profiles:   { id: string; full_name: string | null; email: string | null } | null
     }[]
 
+    // Existing records for today (including auto-marks from joining the live class)
+    const existing: Record<string, { status: Status; source: string | null }> = {}
+    for (const r of (existingRes.data ?? []) as { student_id: string; status: string | null; source: string | null }[]) {
+      existing[r.student_id] = { status: (r.status as Status) ?? 'present', source: r.source }
+    }
+
     setStudents(raw.map(r => ({
       id:     r.student_id,
       name:   r.profiles?.full_name ?? r.profiles?.email ?? 'Unknown',
-      status: 'present',
+      status: existing[r.student_id]?.status ?? 'absent',
+      auto:   existing[r.student_id]?.source === 'live_auto',
     })))
     setLoadingStudents(false)
   }
 
   function setStatus(id: string, status: Status) {
-    setStudents(prev => prev.map(s => s.id === id ? { ...s, status } : s))
+    setStudents(prev => prev.map(s => s.id === id ? { ...s, status, auto: false } : s))
   }
 
   async function saveAttendance() {
@@ -105,6 +122,7 @@ export default function InClassAttendancePage({ onNavigate }: Props) {
       student_id: s.id,
       date:       today,
       status:     s.status,
+      source:     s.auto ? 'live_auto' : 'manual',  // teacher's manual save wins over auto-marks
     }))
 
     const { error: err } = await supabase
@@ -191,6 +209,9 @@ export default function InClassAttendancePage({ onNavigate }: Props) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-foreground">{s.name}</p>
+                    {s.auto && (
+                      <p className="text-[11px] text-primary font-medium">Auto-marked from live class — click a status to override</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {(['present', 'late', 'absent'] as Status[]).map(st => (

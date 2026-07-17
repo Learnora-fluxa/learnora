@@ -143,6 +143,17 @@ ParticipantsPanelPage, ScreenSharePage, AddEventPage
 - **SQL:** `ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS daily_room_name TEXT;` ✅ Confirmed run
 - **Edge Function:** `npx supabase functions deploy daily-token` ✅ Deployed to project `njriewvlsufzvxgfpzkg`
 
+### CBT exams + auto-attendance + promotion + raise-hand ✅ DONE (2026-07-17)
+- **CBT exam mode** (separate from assignments; lesson optional):
+  - `CBTExamManagerPage` `/cbt-exams` (teacher, in teacherNav): create exam (class, subject, optional lesson, duration, randomize, instructions), inline question editor (MCQ/true-false/short — same `{opts, answer}` format as quiz_questions), publish/close/reopen/delete, inline results table with %
+  - `CBTExamTakePage` `/cbt-exam` (student): intro screen → countdown timer → one-question-at-a-time with navigator dots → submit; auto-submits at 0:00; timer survives refresh (recomputed from `started_at` in DB); deterministic per-student shuffle when randomize is on; short answers matched case-insensitively; one attempt per student
+  - Student entry: ExamSchedulePage now shows a "CBT Exams" section (published exams for enrolled classes, Start button or score if taken)
+  - Tables: `cbt_exams`, `cbt_attempts` + `quiz_questions.exam_id` column — **SQL below must be run**
+- **Auto-attendance**: student joining a Daily live class auto-inserts `attendance_records` (status=present, source='live_auto') for today; InClassAttendancePage now loads today's existing records (auto-marks shown with a note), teacher clicks override → saved as source='manual'; unmarked students default to absent
+- **Student promotion**: `PromoteStudentsModal` shared component — teacher (StudentsManagementPage checkboxes + Promote button) and admin (AdminClassDetailsPage same) select students → target class → old enrollments replaced
+- **Raise-hand**: broadcast via Daily app-message; amber ring + ✋ badge on tiles, ✋ in participants panel, raised-count chip in room top bar
+- **sessionStorage fix**: `learnora_session_class_id` (new key) carries class UUID; `learnora_session_class` now always the display name (students used to see a UUID in the lobby)
+
 ### RBAC leak sweep + Live Classes hardening ✅ DONE (2026-07-16)
 - **TopBar** rewritten role-aware (was matching display-label strings): bell/messages/calendar/settings now map per actual `profile.role`; icons hidden for roles with no destination; "Log out" in avatar dropdown now actually calls `signOut()` (was navigating to /logout leaving the session alive)
 - **DashboardLayout AI button**: only rendered for student (→ ai-tutor) and teacher (→ ai-assistant); hidden for admin/parent/super_admin (they were being bounced by RoleRoute — the "AI page problem")

@@ -74,6 +74,10 @@ import MobileStudentSettingsPage from './pages/mobile/MobileStudentSettingsPage'
 import ReportBuilderPage         from './pages/admin/ReportBuilderPage'
 import BulkGradePage             from './pages/BulkGradePage'
 
+// ── CBT exams ─────────────────────────────────────────────────────────────────
+import CBTExamManagerPage        from './pages/CBTExamManagerPage'
+import CBTExamTakePage           from './pages/CBTExamTakePage'
+
 // ── Bug-fix / new teacher & admin pages ──────────────────────────────────────
 import AdminAttendancePage       from './pages/admin/AdminAttendancePage'
 import AdminAnnouncementsPage    from './pages/admin/AdminAnnouncementsPage'
@@ -396,6 +400,8 @@ function StudentTimetableRoute()    { const n = useNav(); return <StudentTimetab
 function BulkStudentImportRoute()   { const n = useNav(); return <BulkStudentImportPage      onNavigate={n} /> }
 function ReportBuilderRoute()       { const n = useNav(); return <ReportBuilderPage         onNavigate={n} /> }
 function BulkGradeRoute()           { const n = useNav(); return <BulkGradePage             onNavigate={n} /> }
+function CBTManagerRoute()          { const n = useNav(); return <CBTExamManagerPage        onNavigate={n} /> }
+function CBTTakeRoute()             { const n = useNav(); return <CBTExamTakePage           onNavigate={n} /> }
 
 // ── Round-3 wrappers ──────────────────────────────────────────────────────────
 function ConnectedDevicesRoute()    { const n = useNav(); return <ConnectedDevicesPage   onNavigate={n} /> }
@@ -549,6 +555,7 @@ export default function App() {
           <Route path="/lesson-notes"         element={<LessonNotesRoute />} />
           <Route path="/my-submissions"       element={<MySubmissionsRoute />} />
           <Route path="/exam-schedule"        element={<ExamScheduleRoute />} />
+          <Route path="/cbt-exam"             element={<CBTTakeRoute />} />
           <Route path="/study-planner"        element={<StudyPlannerRoute />} />
           <Route path="/discussion-forum"     element={<DiscussionForumRoute />} />
           {/* AI Tutor pages */}
@@ -633,6 +640,7 @@ export default function App() {
           <Route path="/lesson-planner"        element={<LessonPlannerRoute />} />
           <Route path="/teacher-analytics"     element={<TeacherAnalyticsRoute />} />
           <Route path="/quiz-builder"          element={<QuizBuilderRoute />} />
+          <Route path="/cbt-exams"             element={<CBTManagerRoute />} />
           <Route path="/bulk-grade"            element={<BulkGradeRoute />} />
           <Route path="/plagiarism-check"      element={<PlagiarismRoute />} />
         </Route>
