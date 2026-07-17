@@ -143,6 +143,12 @@ ParticipantsPanelPage, ScreenSharePage, AddEventPage
 - **SQL:** `ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS daily_room_name TEXT;` ✅ Confirmed run
 - **Edge Function:** `npx supabase functions deploy daily-token` ✅ Deployed to project `njriewvlsufzvxgfpzkg`
 
+### Class recording + tldraw whiteboard ✅ DONE (2026-07-17)
+- **Recording (free-plan, teacher-side)**: `src/lib/useClassRecorder.ts` — Record button in live class top bar (teacher only): getDisplayMedia (share this tab + tab audio) mixed with teacher mic via AudioContext → MediaRecorder (webm, 1 Mbps) → upload to private `class-recordings` Storage bucket → insert `session_recordings` row (recording_url = storage path). Recording stops automatically if teacher stops sharing. **Bucket + policies SQL must be run** (see chat 2026-07-17)
+- **ClassRecordingsPage** — full rewrite: real `session_recordings` query with live_sessions/classes/subjects/teacher joins; teachers see own sessions, students see enrolled classes; play via 1-hour signed URL in an in-page video modal
+- **Whiteboard (tldraw + Supabase Realtime)**: `src/components/whiteboard/LiveWhiteboard.tsx` — tldraw store synced over Realtime broadcast channel `whiteboard:{sessionId}`; late joiners request state, peers reply with snapshot; no server/table needed; lazy-loaded (own chunk). Wired into LiveClassRoomPage "Board" mode + standalone `/whiteboard` (shares class board when opened from a session, else personal board)
+- `npm install tldraw` added to package.json
+
 ### CBT exams + auto-attendance + promotion + raise-hand ✅ DONE (2026-07-17)
 - **CBT exam mode** (separate from assignments; lesson optional):
   - `CBTExamManagerPage` `/cbt-exams` (teacher, in teacherNav): create exam (class, subject, optional lesson, duration, randomize, instructions), inline question editor (MCQ/true-false/short — same `{opts, answer}` format as quiz_questions), publish/close/reopen/delete, inline results table with %

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import Daily from '@daily-co/daily-js'
 import type { DailyCall } from '@daily-co/daily-js'
 import {
@@ -16,11 +16,14 @@ import {
 } from '@daily-co/daily-react'
 import {
   Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, Hand,
-  MessageSquare, Users, Phone, Maximize2, Send, PenLine, X,
+  MessageSquare, Users, Phone, Maximize2, Send, PenLine, X, Disc,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { logSupabaseError } from '../lib/supabaseError'
+import { useClassRecorder } from '../lib/useClassRecorder'
+
+const LiveWhiteboard = lazy(() => import('../components/whiteboard/LiveWhiteboard'))
 
 type Props = { onNavigate: (page: string) => void }
 type Panel = 'chat' | 'participants' | null
@@ -105,6 +108,8 @@ function LiveRoomInner({
   const [raisedHands, setRaisedHands] = useState<Record<string, string>>({})  // daily sessionId -> participant name
   const chatEndRef      = useRef<HTMLDivElement>(null)
   const attendanceMarked = useRef(false)
+
+  const recorder = useClassRecorder(sessionId, profile?.school_id ?? '')
 
   const camOn = localId ? !localVideo.isOff : initCamOn
   const micOn = localId ? !localAudio.isOff : initMicOn
@@ -283,6 +288,23 @@ function LiveRoomInner({
               {m === 'screenshare' ? 'Screen' : 'Gallery'}
             </button>
           ))}
+          {isTeacher && (
+            <button
+              onClick={() => recorder.state === 'recording' ? recorder.stop() : recorder.state === 'idle' && recorder.start()}
+              disabled={recorder.state === 'uploading'}
+              title={recorder.state === 'recording' ? 'Stop recording' : 'Record this class (share this tab with audio)'}
+              className={`flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-semibold transition-colors ${
+                recorder.state === 'recording' ? 'bg-red-500 text-white'
+                : recorder.state === 'uploading' ? 'bg-white/10 text-white/50'
+                : 'text-white/40 hover:text-white border border-white/15'
+              }`}
+            >
+              <Disc size={11} className={recorder.state === 'recording' ? 'animate-pulse' : ''} />
+              {recorder.state === 'recording'
+                ? `${Math.floor(recorder.elapsed / 60)}:${String(recorder.elapsed % 60).padStart(2, '0')}`
+                : recorder.state === 'uploading' ? 'Saving…' : 'Record'}
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-3">
           {Object.keys(raisedHands).length > 0 && (
@@ -293,6 +315,13 @@ function LiveRoomInner({
           <span className="text-white/40 text-xs">{allParticipantIds.length} in call</span>
         </div>
       </div>
+
+      {/* Recorder error toast */}
+      {recorder.error && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 px-4 py-2 bg-red-500 text-white text-xs font-semibold rounded-full shadow-lg">
+          {recorder.error}
+        </div>
+      )}
 
       {/* Join error overlay */}
       {joinError && (
@@ -391,17 +420,14 @@ function LiveRoomInner({
           )}
 
           {mode === 'whiteboard' && (
-            <div className="flex-1 bg-white rounded-xl flex flex-col items-center justify-center relative">
-              <div className="absolute top-3 left-3 flex items-center gap-2">
-                {['bg-black', 'bg-primary', 'bg-red-500', 'bg-green-500'].map(c => (
-                  <button key={c} className={`size-6 rounded-full ${c} border-2 border-white shadow`} />
-                ))}
-                <div className="h-6 w-px bg-black/15 mx-1" />
-                <button className="flex items-center gap-1 text-xs text-gray-600 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50">
-                  <PenLine size={11} /> Draw
-                </button>
-              </div>
-              <p className="text-gray-300 text-sm select-none">Whiteboard — coming soon</p>
+            <div className="flex-1 rounded-xl overflow-hidden">
+              <Suspense fallback={
+                <div className="w-full h-full bg-white rounded-xl flex items-center justify-center">
+                  <p className="text-gray-400 text-sm">Loading whiteboard…</p>
+                </div>
+              }>
+                <LiveWhiteboard sessionId={sessionId} />
+              </Suspense>
             </div>
           )}
         </div>
