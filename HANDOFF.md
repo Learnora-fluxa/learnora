@@ -143,6 +143,17 @@ ParticipantsPanelPage, ScreenSharePage, AddEventPage
 - **SQL:** `ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS daily_room_name TEXT;` ✅ Confirmed run
 - **Edge Function:** `npx supabase functions deploy daily-token` ✅ Deployed to project `njriewvlsufzvxgfpzkg`
 
+### Cross-role messaging unified ✅ DONE (2026-07-18)
+- **Root bug fixed**: parent-created conversations (dm: name convention) never inserted `conversation_members` rows, so teacher/student lists (membership-driven) never showed them → parents' messages were invisible to teachers
+- **`src/lib/messaging.ts`**: `getOrCreateDirectConversation()` — canonical `dm:<uuidA>:<uuidB>` name + upserts BOTH member rows (self-heals old parent conversations on open); role-based contact loaders (student/teacher/admin/super-admin)
+- **NewMessageModal** shared component — searchable contact picker grouped by role
+- **Student MessagesPage**: "+ New" → teachers of their classes + school admins
+- **TeacherMessagesPage**: "+ New" → students of their classes, those students' parents, school admins
+- **ParentMessageTeacherPage** ("Message the School"): now uses the shared helper (member rows created) + school admins added to contact list
+- **StaffMessagesPage** (new, serves 2 routes): `/admin-messages` (admin → teachers/parents/students + super admins) and `/super-messages` (super admin → every school's admin; conversations live under the target school's school_id). Realtime, unread counts, optimistic send
+- Nav: "Messages" added to adminNav + superAdminNav; TopBar messages icon now works for admin + super admin
+- **SQL required**: `profiles_read_super_admins` policy (admins can't see super_admin profiles otherwise — school_id NULL fails school-iso RLS). See chat 2026-07-18
+
 ### Class recording + tldraw whiteboard ✅ DONE (2026-07-17)
 - **Recording (free-plan, teacher-side)**: `src/lib/useClassRecorder.ts` — Record button in live class top bar (teacher only): getDisplayMedia (share this tab + tab audio) mixed with teacher mic via AudioContext → MediaRecorder (webm, 1 Mbps) → upload to private `class-recordings` Storage bucket → insert `session_recordings` row (recording_url = storage path). Recording stops automatically if teacher stops sharing. **Bucket + policies SQL must be run** (see chat 2026-07-17)
 - **ClassRecordingsPage** — full rewrite: real `session_recordings` query with live_sessions/classes/subjects/teacher joins; teachers see own sessions, students see enrolled classes; play via 1-hour signed URL in an in-page video modal

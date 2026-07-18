@@ -2,6 +2,7 @@
 import { Send, ChevronLeft } from 'lucide-react'
 import MobileLayout, { parentMobileNav } from '../../components/layout/MobileLayout'
 import { useAuth } from '../../contexts/AuthContext'
+import { getOrCreateDirectConversation } from '../../lib/messaging'
 import { supabase } from '../../lib/supabase'
 
 type Props = { onNavigate: (page: string) => void }
@@ -86,6 +87,26 @@ export default function ParentMessageTeacherPage({ onNavigate }: Props) {
         initials:name.split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase(),
       })
     }
+
+    // Also allow parents to reach the school administrators
+    const { data: adminData } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .eq('school_id', schoolId)
+      .eq('role', 'admin')
+    for (const a of (adminData ?? []) as { id: string; full_name: string | null }[]) {
+      if (seen.has(a.id)) continue
+      seen.add(a.id)
+      const name = a.full_name ?? 'School Admin'
+      list.push({
+        id:      a.id,
+        name,
+        subject: 'School Admin',
+        cls:     '',
+        initials:name.split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase(),
+      })
+    }
+
     setTeachers(list)
     setLoading(false)
   }
@@ -94,29 +115,12 @@ export default function ParentMessageTeacherPage({ onNavigate }: Props) {
     setSelected(teacher)
     setMessages([])
     setConvId(null)
-    const schoolId = profile!.school_id!
-    const parentId = profile!.id
-    const dmName   = `dm:${[parentId, teacher.id].sort().join(':')}`
-
-    const { data: existing } = await supabase
-      .from('conversations')
-      .select('id')
-      .eq('school_id', schoolId)
-      .eq('name', dmName)
-      .maybeSingle()
-
-    let cid = (existing as { id: string } | null)?.id
-    if (!cid) {
-      const { data: newConv } = await supabase
-        .from('conversations')
-        .insert({ school_id: schoolId, type: 'direct', name: dmName })
-        .select('id').single()
-      cid = (newConv as { id: string } | null)?.id
-    }
-
-    if (!cid) return
-    setConvId(cid)
-    await loadMessages(cid)
+    // Shared helper creates the conversation AND both member rows, so the
+    // teacher/admin side (membership-driven lists) sees this conversation too
+    const result = await getOrCreateDirectConversation(profile!.id, teacher.id, profile!.school_id!)
+    if ('error' in result) return
+    setConvId(result.id)
+    await loadMessages(result.id)
   }
 
   async function loadMessages(cid: string) {
@@ -207,8 +211,8 @@ export default function ParentMessageTeacherPage({ onNavigate }: Props) {
           <ChevronLeft size={20} />
         </button>
 
-        <h1 className="text-lg font-bold text-foreground mb-1">Message a Teacher</h1>
-        <p className="text-sm text-muted mb-5">Contact your child's subject teachers directly.</p>
+        <h1 className="text-lg font-bold text-foreground mb-1">Message the School</h1>
+        <p className="text-sm text-muted mb-5">Contact your child's subject teachers or the school admin directly.</p>
 
         {loading ? (
           <div className="text-center py-12 text-sm text-muted">Loading teachers…</div>

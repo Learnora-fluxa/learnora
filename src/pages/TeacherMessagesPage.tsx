@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, Send, Users, User, ChevronRight, MessageSquare } from 'lucide-react'
+import { Search, Send, Users, User, ChevronRight, MessageSquare, Plus } from 'lucide-react'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import { teacherNav } from '../components/layout/Sidebar'
+import NewMessageModal from '../components/shared/NewMessageModal'
 import { useAuth, profileToSidebarUser } from '../contexts/AuthContext'
+import { loadTeacherContacts } from '../lib/messaging'
 import { supabase } from '../lib/supabase'
 
 type Props = { onNavigate: (page: string) => void }
@@ -48,6 +50,7 @@ export default function TeacherMessagesPage({ onNavigate }: Props) {
   const [draft,        setDraft]        = useState('')
   const [sending,      setSending]      = useState(false)
   const [activeConvId, setActiveConvId] = useState<string | null>(null)
+  const [showNew,      setShowNew]      = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { if (profile?.id) loadContacts() }, [profile?.id])
@@ -82,7 +85,7 @@ export default function TeacherMessagesPage({ onNavigate }: Props) {
       .eq('school_id', profile!.school_id!)
 
     const convIds = (memberData ?? []).map((m: { conversation_id: string }) => m.conversation_id)
-    if (!convIds.length) { setLoadingList(false); return }
+    if (!convIds.length) { setLoadingList(false); return [] }
 
     const [partnerRes, lastMsgRes, myMemberRes, unreadMsgRes] = await Promise.all([
       supabase.from('conversation_members')
@@ -134,15 +137,17 @@ export default function TeacherMessagesPage({ onNavigate }: Props) {
       }
     }
 
-    setContacts(convIds.map(id => ({
+    const list: Contact[] = convIds.map(id => ({
       id,
       name:     partnerMap[id]?.name ?? 'Unknown',
       type:     partnerMap[id]?.role ?? 'student',
       lastMsg:  lastMsgMap[id]?.body ?? '',
       lastTime: lastMsgMap[id] ? fmtMsgTime(lastMsgMap[id].sent_at) : '',
       unread:   unreadMap[id] ?? 0,
-    })))
+    }))
+    setContacts(list)
     setLoadingList(false)
+    return list
   }
 
   async function loadMessages(convId: string) {
@@ -218,11 +223,20 @@ export default function TeacherMessagesPage({ onNavigate }: Props) {
         {/* Contact list */}
         <div className={`flex flex-col border-r border-black/8 ${selected ? 'hidden md:flex' : 'flex'} w-full md:w-[320px] shrink-0`}>
           <div className="p-4 border-b border-black/8 flex flex-col gap-3">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-              <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search..."
-                className="w-full h-9 pl-9 pr-3 border border-black/15 rounded-input text-sm outline-none focus:border-primary" />
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                <input value={search} onChange={e => setSearch(e.target.value)}
+                  placeholder="Search..."
+                  className="w-full h-9 pl-9 pr-3 border border-black/15 rounded-input text-sm outline-none focus:border-primary" />
+              </div>
+              <button
+                onClick={() => setShowNew(true)}
+                title="New message"
+                className="size-9 shrink-0 rounded-input bg-primary text-white flex items-center justify-center hover:bg-primary-deep transition-colors"
+              >
+                <Plus size={15} />
+              </button>
             </div>
             <div className="flex gap-1 bg-canvas rounded-md p-1">
               {(['all', 'student', 'parent'] as const).map(f => (
@@ -318,9 +332,27 @@ export default function TeacherMessagesPage({ onNavigate }: Props) {
           <div className="flex-1 hidden md:flex items-center justify-center text-muted flex-col gap-3">
             <MessageSquare size={40} className="opacity-20" />
             <p className="text-sm">Select a student or parent to start messaging</p>
+            <button
+              onClick={() => setShowNew(true)}
+              className="flex items-center gap-1.5 h-9 px-4 bg-primary text-white text-sm font-semibold rounded-pill hover:bg-primary-deep transition-colors"
+            >
+              <Plus size={13} /> New Message
+            </button>
           </div>
         )}
       </div>
+
+      <NewMessageModal
+        open={showNew}
+        onClose={() => setShowNew(false)}
+        loadContacts={() => loadTeacherContacts(profile!.id, profile!.school_id!)}
+        onOpened={async convId => {
+          const list = await loadContacts()
+          const c = (list ?? []).find(x => x.id === convId)
+          setActiveConvId(convId)
+          if (c) setSelected(c)
+        }}
+      />
     </DashboardLayout>
   )
 }

@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, Send, Paperclip, MoreVertical, ArrowLeft, MessageSquare, Loader2, BellOff, FolderOpen } from 'lucide-react'
+import { Search, Send, Paperclip, MoreVertical, ArrowLeft, MessageSquare, Loader2, BellOff, FolderOpen, Plus } from 'lucide-react'
 import DashboardLayout from '../components/layout/DashboardLayout'
+import NewMessageModal from '../components/shared/NewMessageModal'
 import { useAuth, profileToSidebarUser } from '../contexts/AuthContext'
+import { loadStudentContacts } from '../lib/messaging'
 import { supabase } from '../lib/supabase'
 
 type Props = { onNavigate: (page: string) => void }
@@ -52,6 +54,7 @@ export default function MessagesPage({ onNavigate }: Props) {
   const [sending,       setSending]       = useState(false)
   const [uploading,     setUploading]     = useState(false)
   const [showMenu,      setShowMenu]      = useState(false)
+  const [showNew,       setShowNew]       = useState(false)
   const bottomRef  = useRef<HTMLDivElement>(null)
   const fileRef    = useRef<HTMLInputElement>(null)
   const menuRef    = useRef<HTMLDivElement>(null)
@@ -281,7 +284,15 @@ export default function MessagesPage({ onNavigate }: Props) {
       <div className={`w-full md:w-[320px] lg:w-[360px] shrink-0 bg-surface border-r border-black/6 flex flex-col overflow-hidden
         ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 md:p-5 border-b border-black/6 shrink-0">
-          <h2 className="text-lg font-bold text-foreground mb-3">Messages</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-bold text-foreground">Messages</h2>
+            <button
+              onClick={() => setShowNew(true)}
+              className="flex items-center gap-1.5 h-8 px-3 bg-primary text-white text-xs font-semibold rounded-pill hover:bg-primary-deep transition-colors"
+            >
+              <Plus size={12} /> New
+            </button>
+          </div>
           <div className="flex items-center gap-2.5 h-10 px-4 bg-canvas border border-black/8 rounded-input">
             <Search size={15} className="text-muted shrink-0" />
             <input type="search" placeholder="Search chats..."
@@ -422,9 +433,26 @@ export default function MessagesPage({ onNavigate }: Props) {
           <div className="flex-1 flex items-center justify-center text-muted flex-col gap-3">
             <MessageSquare size={40} className="opacity-20" />
             <p className="text-sm">Select a conversation</p>
+            <button
+              onClick={() => setShowNew(true)}
+              className="flex items-center gap-1.5 h-9 px-4 bg-primary text-white text-sm font-semibold rounded-pill hover:bg-primary-deep transition-colors"
+            >
+              <Plus size={13} /> Start a conversation
+            </button>
           </div>
         )}
       </div>
+
+      <NewMessageModal
+        open={showNew}
+        onClose={() => setShowNew(false)}
+        loadContacts={() => loadStudentContacts(profile!.id, profile!.school_id!)}
+        onOpened={async convId => {
+          await loadConversations()
+          setActiveId(convId)
+          setMobileView('chat')
+        }}
+      />
     </DashboardLayout>
   )
 }

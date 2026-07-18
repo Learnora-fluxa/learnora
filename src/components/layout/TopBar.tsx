@@ -19,11 +19,11 @@ function roleNav(role: string | undefined) {
     case 'teacher':
       return { notifications: 'notifications',        messages: 'teacher-messages', calendar: 'teacher-calendar', settings: 'teacher-settings'  }
     case 'admin':
-      return { notifications: 'notifications',        messages: null,               calendar: 'timetable',        settings: 'settings'          }
+      return { notifications: 'notifications',        messages: 'admin-messages',   calendar: 'timetable',        settings: 'settings'          }
     case 'parent':
       return { notifications: 'parent/notifications', messages: 'parent/chat',      calendar: 'parent/calendar',  settings: 'settings'          }
     case 'super_admin':
-      return { notifications: 'super-notifications',  messages: null,               calendar: null,               settings: 'platform-settings' }
+      return { notifications: 'super-notifications',  messages: 'super-messages',   calendar: null,               settings: 'platform-settings' }
     default: // student
       return { notifications: 'notifications',        messages: 'messages',         calendar: 'calendar',         settings: 'settings'          }
   }

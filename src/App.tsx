@@ -78,6 +78,9 @@ import BulkGradePage             from './pages/BulkGradePage'
 import CBTExamManagerPage        from './pages/CBTExamManagerPage'
 import CBTExamTakePage           from './pages/CBTExamTakePage'
 
+// ── Staff messaging (admin + super admin) ────────────────────────────────────
+import StaffMessagesPage         from './pages/StaffMessagesPage'
+
 // ── Bug-fix / new teacher & admin pages ──────────────────────────────────────
 import AdminAttendancePage       from './pages/admin/AdminAttendancePage'
 import AdminAnnouncementsPage    from './pages/admin/AdminAnnouncementsPage'
@@ -402,6 +405,7 @@ function ReportBuilderRoute()       { const n = useNav(); return <ReportBuilderP
 function BulkGradeRoute()           { const n = useNav(); return <BulkGradePage             onNavigate={n} /> }
 function CBTManagerRoute()          { const n = useNav(); return <CBTExamManagerPage        onNavigate={n} /> }
 function CBTTakeRoute()             { const n = useNav(); return <CBTExamTakePage           onNavigate={n} /> }
+function StaffMessagesRoute()       { const n = useNav(); return <StaffMessagesPage         onNavigate={n} /> }
 
 // ── Round-3 wrappers ──────────────────────────────────────────────────────────
 function ConnectedDevicesRoute()    { const n = useNav(); return <ConnectedDevicesPage   onNavigate={n} /> }
@@ -692,6 +696,7 @@ export default function App() {
           <Route path="/report-builder"      element={<ReportBuilderRoute />} />
           <Route path="/school-settings"     element={<SchoolSettingsRoute />} />
           <Route path="/integrations"        element={<IntegrationsRoute />} />
+          <Route path="/admin-messages"      element={<StaffMessagesRoute />} />
         </Route>
 
         {/* ── Admin + Super Admin shared ────────────────────────────── */}
@@ -714,6 +719,7 @@ export default function App() {
           <Route path="/feature-flags"       element={<FeatureFlagsRoute />} />
           <Route path="/email-templates"     element={<EmailTemplatesRoute />} />
           <Route path="/broadcast"           element={<BroadcastRoute />} />
+          <Route path="/super-messages"      element={<StaffMessagesRoute />} />
         </Route>
 
       </Route>{/* end ProtectedRoute */}
