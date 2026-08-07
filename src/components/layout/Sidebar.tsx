@@ -81,6 +81,7 @@ export const adminNav: NavItem[] = [
 export const superAdminNav: NavItem[] = [
   { label: 'Platform',      icon: LayoutDashboard, page: 'super-dashboard'   },
   { label: 'Schools',       icon: BookOpen,        page: 'schools-list'      },
+  { label: 'Users',         icon: Users,           page: 'super-users'       },
   { label: 'Billing',       icon: TrendingUp,      page: 'platform-billing'  },
   { label: 'Plans',         icon: FileText,        page: 'plans-pricing'     },
   { label: 'Analytics',     icon: BarChart2,       page: 'platform-analytics'},
@@ -116,6 +117,16 @@ export const teacherNav: NavItem[] = [
   { label: 'Settings',      icon: Settings,        page: 'teacher-settings'      },
   { label: 'Support',       icon: HelpCircle,      page: 'teacher-support'       },
   { label: 'Logout',        icon: LogOut,          page: 'logout'                },
+]
+
+export const parentNav: NavItem[] = [
+  { label: 'Home',          icon: LayoutDashboard, page: 'parent/home'          },
+  { label: 'Progress',      icon: TrendingUp,      page: 'parent/progress'      },
+  { label: 'Messages',      icon: MessageSquare,   page: 'parent/chat'          },
+  { label: 'Calendar',      icon: Calendar,        page: 'parent/calendar'      },
+  { label: 'School Fees',   icon: DollarSign,      page: 'parent/fees'          },
+  { label: 'Profile',       icon: Settings,        page: 'parent/profile'       },
+  { label: 'Logout',        icon: LogOut,          page: 'logout'               },
 ]
 
 type SidebarUser = { name: string; role: string; initials: string }

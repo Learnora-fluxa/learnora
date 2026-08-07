@@ -1,4 +1,4 @@
-import { Home, BookOpen, MessageCircle, Calendar, User, TrendingUp, CreditCard, Bell, Sparkles } from 'lucide-react'
+import { Home, BookOpen, MessageCircle, Calendar, User, TrendingUp, Sparkles } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 export type MobileNavItem = { icon: LucideIcon; label: string; page: string }
@@ -14,8 +14,8 @@ export const studentMobileNav: MobileNavItem[] = [
 export const parentMobileNav: MobileNavItem[] = [
   { icon: Home,          label: 'Home',     page: 'parent/home'         },
   { icon: TrendingUp,    label: 'Progress', page: 'parent/progress'     },
-  { icon: CreditCard,    label: 'Fees',     page: 'parent/fees'         },
-  { icon: Bell,          label: 'Updates',  page: 'parent/announcements'},
+  { icon: MessageCircle, label: 'Chat',     page: 'parent/chat'         },
+  { icon: Calendar,      label: 'Calendar', page: 'parent/calendar'     },
   { icon: User,          label: 'Profile',  page: 'parent/profile'      },
 ]
 
