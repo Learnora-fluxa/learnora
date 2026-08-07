@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ChevronLeft, CheckCircle2 } from 'lucide-react'
+import { ChevronLeft, CheckCircle2, Sparkles } from 'lucide-react'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import { teacherNav } from '../components/layout/Sidebar'
 import { useAuth, profileToSidebarUser } from '../contexts/AuthContext'
@@ -49,14 +49,31 @@ export default function GradingScreenPage({ onNavigate }: Props) {
     const assignMap: Record<string, { title: string; max_score: number }> = {}
     for (const a of assignments) assignMap[a.id] = { title: a.title, max_score: a.max_score }
 
-    const { data } = await supabase
-      .from('assignment_submissions')
-      .select('id, assignment_id, student_id, submitted_at, submission_text, profiles!student_id(full_name, email)')
-      .in('assignment_id', assignIds)
-      .eq('status', 'submitted')
-      .order('submitted_at', { ascending: true })
-      .limit(1)
-      .maybeSingle()
+    const selectedSubmissionId = sessionStorage.getItem('learnora_selected_submission')
+
+    let data: unknown = null
+
+    if (selectedSubmissionId) {
+      const { data: picked } = await supabase
+        .from('assignment_submissions')
+        .select('id, assignment_id, student_id, submitted_at, submission_text, profiles!student_id(full_name, email)')
+        .eq('id', selectedSubmissionId)
+        .in('assignment_id', assignIds)
+        .maybeSingle()
+      data = picked
+    }
+
+    if (!data) {
+      const { data: nextItem } = await supabase
+        .from('assignment_submissions')
+        .select('id, assignment_id, student_id, submitted_at, submission_text, profiles!student_id(full_name, email)')
+        .in('assignment_id', assignIds)
+        .eq('status', 'submitted')
+        .order('submitted_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      data = nextItem
+    }
 
     if (!data) { setLoading(false); return }
 
@@ -80,6 +97,27 @@ export default function GradingScreenPage({ onNavigate }: Props) {
       studentId:       raw.student_id,
       maxScore:        info?.max_score ?? 100,
     })
+
+    const rawDraft = sessionStorage.getItem('learnora_ai_grading_draft')
+    if (rawDraft) {
+      try {
+        const draft = JSON.parse(rawDraft) as { submissionId?: string; score?: string; feedback?: string }
+        if (draft.submissionId === raw.id) {
+          setScore(draft.score ?? '')
+          setFeedback(draft.feedback ?? '')
+        } else {
+          setScore('')
+          setFeedback('')
+        }
+      } catch {
+        setScore('')
+        setFeedback('')
+      }
+    } else {
+      setScore('')
+      setFeedback('')
+    }
+
     setLoading(false)
   }
 
@@ -113,6 +151,7 @@ export default function GradingScreenPage({ onNavigate }: Props) {
 
     setSaving(false)
     if (uErr) { logSupabaseError('GradingScreen.updateSubmission', uErr); setError(uErr.message); return }
+    sessionStorage.removeItem('learnora_ai_grading_draft')
     setDone(true)
   }
 
@@ -185,9 +224,18 @@ export default function GradingScreenPage({ onNavigate }: Props) {
     >
       <div className="max-w-[1100px] flex flex-col gap-6">
 
-        <div className="flex items-center">
+        <div className="flex items-center gap-4">
           <button onClick={() => onNavigate('submissions-inbox')} className="flex items-center gap-2 text-sm text-muted hover:text-foreground">
             <ChevronLeft size={16} /> Back to Submissions
+          </button>
+          <button
+            onClick={() => {
+              sessionStorage.setItem('learnora_selected_submission', submission.id)
+              onNavigate('ai-assistant')
+            }}
+            className="flex items-center gap-2 text-sm text-primary hover:text-primary-deep"
+          >
+            <Sparkles size={16} /> Open AI Review
           </button>
         </div>
 

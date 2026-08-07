@@ -13,6 +13,12 @@ interface InviteRow { _key: number; email: string; role: string; classId: string
 
 let _nextKey = 3
 
+function makeInviteToken() {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
 export default function InviteUsersPage({ onNavigate }: Props) {
   const { profile } = useAuth()
   const sidebarUser = profileToSidebarUser(profile)
@@ -65,7 +71,7 @@ export default function InviteUsersPage({ onNavigate }: Props) {
       email:      i.email.trim().toLowerCase(),
       role:       i.role.toLowerCase(),
       class_id:   i.classId || null,
-      invited_by: profile!.id,
+      token:      makeInviteToken(),
       status:     'pending',
     }))
 

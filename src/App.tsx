@@ -14,6 +14,7 @@ import PlansAndPricingPage       from './pages/superadmin/PlansAndPricingPage'
 import PlatformAnalyticsPage     from './pages/superadmin/PlatformAnalyticsPage'
 import SupportTicketsPage        from './pages/superadmin/SupportTicketsPage'
 import PlatformSettingsPage      from './pages/superadmin/PlatformSettingsPage'
+import SuperAdminUsersPage       from './pages/superadmin/SuperAdminUsersPage'
 
 // ── Phase 6: Live Classes ─────────────────────────────────────────────────────
 import LiveClassesOverviewPage   from './pages/LiveClassesOverviewPage'
@@ -225,6 +226,7 @@ import ParentHomePage            from './pages/parent/ParentHomePage'
 import ParentProgressPage        from './pages/parent/ParentProgressPage'
 import ParentCalendarPage        from './pages/parent/ParentCalendarPage'
 import ParentChatPage            from './pages/parent/ParentChatPage'
+import ParentChatRoomPage        from './pages/parent/ParentChatRoomPage'
 import ParentNotificationsPage   from './pages/parent/ParentNotificationsPage'
 import ParentProfilePage         from './pages/parent/ParentProfilePage'
 import SchoolFeesPage            from './pages/parent/SchoolFeesPage'
@@ -458,6 +460,7 @@ function SuperDashRoute()          { const n = useNav(); return <SuperAdminDashb
 function SchoolsListRoute()        { const n = useNav(); return <SchoolsListPage             onNavigate={n} /> }
 function OnboardSchoolRoute()      { const n = useNav(); return <OnboardSchoolPage           onNavigate={n} /> }
 function SuperNotifsRoute()        { const n = useNav(); return <SuperAdminNotificationsPage onNavigate={n} /> }
+function SuperUsersRoute()         { const n = useNav(); return <SuperAdminUsersPage         onNavigate={n} /> }
 
 // ── Mobile student wrappers ───────────────────────────────────────────────────
 function OnboardingRoute()      { const n = useNav(); return <MobileOnboardingPage       onNavigate={n} /> }
@@ -476,7 +479,7 @@ function ParentHomeRoute()      { const n = useNav(); return <ParentHomePage    
 function ParentProgressRoute()  { const n = useNav(); return <ParentProgressPage       onNavigate={n} /> }
 function ParentCalRoute()       { const n = useNav(); return <ParentCalendarPage       onNavigate={n} /> }
 function ParentChatRoute()      { const n = useNav(); return <ParentChatPage           onNavigate={n} /> }
-function ParentChatRoomRoute()  { const n = useNav(); return <ChatRoomPage             onNavigate={n} backPage="parent/chat" /> }
+function ParentChatRoomRoute()  { const n = useNav(); return <ParentChatRoomPage       onNavigate={n} backPage="parent/chat" /> }
 function ParentNotifsRoute()    { const n = useNav(); return <ParentNotificationsPage  onNavigate={n} /> }
 function ParentProfileRoute()   { const n = useNav(); return <ParentProfilePage        onNavigate={n} /> }
 function SchoolFeesRoute()      { const n = useNav(); return <SchoolFeesPage           onNavigate={n} /> }
@@ -708,6 +711,7 @@ export default function App() {
         <Route element={<RoleRoute roles={['super_admin']} />}>
           <Route path="/super-dashboard"     element={<SuperDashRoute />} />
           <Route path="/schools-list"        element={<SchoolsListRoute />} />
+          <Route path="/super-users"         element={<SuperUsersRoute />} />
           <Route path="/onboard-school"      element={<OnboardSchoolRoute />} />
           <Route path="/super-notifications" element={<SuperNotifsRoute />} />
           <Route path="/platform-billing"    element={<PlatformBillingRoute />} />

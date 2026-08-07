@@ -48,6 +48,11 @@ export default function SubmissionsInboxPage({ onNavigate }: Props) {
   const [filter,      setFilter]      = useState<FilterStatus>('All')
   const [search,      setSearch]      = useState('')
 
+  function openSubmission(page: 'grading-screen' | 'ai-assistant', submissionId: string) {
+    sessionStorage.setItem('learnora_selected_submission', submissionId)
+    onNavigate(page)
+  }
+
   useEffect(() => { if (profile?.id) loadSubmissions() }, [profile?.id])
 
   async function loadSubmissions() {
@@ -196,12 +201,20 @@ export default function SubmissionsInboxPage({ onNavigate }: Props) {
                     </td>
                     <td className="px-6 py-3.5">
                       {s.status === 'submitted' && (
-                        <button
-                          onClick={() => onNavigate('grading-screen')}
-                          className="text-xs bg-primary text-white font-semibold px-3 py-1.5 rounded-xs hover:bg-primary-deep transition-colors"
-                        >
-                          Grade
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => openSubmission('grading-screen', s.id)}
+                            className="text-xs bg-primary text-white font-semibold px-3 py-1.5 rounded-xs hover:bg-primary-deep transition-colors"
+                          >
+                            Grade
+                          </button>
+                          <button
+                            onClick={() => openSubmission('ai-assistant', s.id)}
+                            className="text-xs border border-primary/25 text-primary font-semibold px-3 py-1.5 rounded-xs hover:bg-primary/5 transition-colors"
+                          >
+                            AI Review
+                          </button>
+                        </div>
                       )}
                       {s.status === 'graded' && (
                         <span className="text-xs text-green-600 font-semibold">Graded</span>

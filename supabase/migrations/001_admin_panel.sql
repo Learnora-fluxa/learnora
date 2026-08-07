@@ -24,7 +24,8 @@ ALTER TABLE public.invitations ENABLE ROW LEVEL SECURITY;
 
 -- Admin can manage invitations for their school
 CREATE POLICY "invitations_admin_all" ON public.invitations
-  FOR ALL USING (school_id = get_my_school_id());
+  FOR ALL USING (school_id = get_my_school_id())
+  WITH CHECK (school_id = get_my_school_id());
 
 -- Allow anonymous/public read by token (tokens are 32-char random hex — safe for invite links)
 CREATE POLICY "invitations_public_read" ON public.invitations

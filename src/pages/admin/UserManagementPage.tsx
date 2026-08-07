@@ -27,6 +27,12 @@ interface NewUser {
   role:      'Student' | 'Teacher' | 'Parent'
 }
 
+function makeInviteToken() {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
 export default function UserManagementPage({ onNavigate }: Props) {
   const { profile } = useAuth()
   const { toast }   = useToast()
@@ -46,6 +52,7 @@ export default function UserManagementPage({ onNavigate }: Props) {
   const [showModal,  setShowModal]  = useState(false)
   const [saving,     setSaving]     = useState(false)
   const [inviteLink, setInviteLink] = useState('')
+  const [inviteError,setInviteError]= useState('')
   const [savedUser,  setSavedUser]  = useState<NewUser | null>(null)
   const [classId,    setClassId]    = useState('')
   const [newUser,    setNewUser]    = useState<NewUser>({ full_name: '', email: '', phone: '', role: 'Student' })
@@ -158,10 +165,15 @@ export default function UserManagementPage({ onNavigate }: Props) {
   // ── Invite modal ──
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
-    if (!schoolId) return
+    if (!schoolId) {
+      setInviteError('Your admin account is not assigned to a school yet.')
+      return
+    }
     setSaving(true)
+    setInviteError('')
     try {
-      const { data: inv, error } = await supabase
+      const token = makeInviteToken()
+      const { error } = await supabase
         .from('invitations')
         .insert({
           school_id: schoolId,
@@ -169,15 +181,19 @@ export default function UserManagementPage({ onNavigate }: Props) {
           full_name: newUser.full_name,
           role:      newUser.role.toLowerCase(),
           class_id:  classId || null,
+          token,
         })
-        .select('token')
-        .single()
       if (error) throw error
-      const link = `${window.location.origin}/invite?token=${(inv as { token: string }).token}`
+      const link = `${window.location.origin}/invite?token=${token}`
       setInviteLink(link)
       setSavedUser(newUser)
     } catch (err: unknown) {
-      toast((err as Error).message ?? 'Failed to create invitation', 'error')
+      const message = (err as Error).message ?? 'Failed to create invitation'
+      const friendly = message.includes('row-level security policy')
+        ? 'Invite creation is blocked by the current Supabase policy. Apply the invitations RLS fix, then try again.'
+        : message
+      setInviteError(friendly)
+      toast(friendly, 'error')
     } finally {
       setSaving(false)
     }
@@ -191,6 +207,7 @@ export default function UserManagementPage({ onNavigate }: Props) {
   function resetModal() {
     setShowModal(false)
     setInviteLink('')
+    setInviteError('')
     setSavedUser(null)
     setClassId('')
     setNewUser({ full_name: '', email: '', phone: '', role: 'Student' })
@@ -314,7 +331,7 @@ export default function UserManagementPage({ onNavigate }: Props) {
             className="flex items-center gap-1.5 h-10 px-4 border border-black/15 text-sm font-semibold text-foreground rounded-pill hover:border-primary hover:text-primary transition-colors">
             <Mail size={13} /> <span className="hidden sm:inline">Bulk Invite</span>
           </button>
-          <button onClick={() => { setShowModal(true); setInviteLink('') }}
+          <button onClick={() => { setShowModal(true); setInviteLink(''); setInviteError('') }}
             className="flex items-center gap-1.5 h-10 px-4 bg-primary text-white text-sm font-semibold rounded-pill hover:bg-primary-deep transition-colors shadow-primary">
             <Plus size={13} /> Add User
           </button>
@@ -621,6 +638,11 @@ export default function UserManagementPage({ onNavigate }: Props) {
                     className="h-10 px-3 border border-black/20 rounded-input text-sm text-foreground placeholder:text-muted outline-none focus:border-primary" />
                   <p className="text-xs text-muted">An invite link will be generated. Share it with the user.</p>
                 </div>
+                {inviteError && (
+                  <div className="rounded-card border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+                    {inviteError}
+                  </div>
+                )}
                 <div className="flex gap-3 pt-1">
                   <button type="button" onClick={resetModal}
                     className="h-10 px-5 border border-black/15 text-sm font-semibold text-foreground rounded-pill hover:border-primary hover:text-primary transition-colors">

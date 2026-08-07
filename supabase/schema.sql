@@ -70,6 +70,7 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "profiles_read"       ON public.profiles FOR SELECT USING (is_super_admin() OR school_id = get_my_school_id() OR id = auth.uid());
 CREATE POLICY "profiles_insert_own" ON public.profiles FOR INSERT WITH CHECK (id = auth.uid());
 CREATE POLICY "profiles_update_own" ON public.profiles FOR UPDATE USING (id = auth.uid());
+CREATE POLICY "profiles_update_super_admin" ON public.profiles FOR UPDATE USING (is_super_admin()) WITH CHECK (is_super_admin());
 
 -- ─── PARENT-STUDENT LINKS ─────────────────────────────────────
 CREATE TABLE public.parent_student_links (
