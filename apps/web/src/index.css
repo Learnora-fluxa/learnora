@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  /* ─── Brand colors (from login screen) ───────────────────────── */
+  --color-primary:       #4b75ff;   /* CTA button, links                 */
+  --color-primary-deep:  #005cf7;   /* gradient deep-blue stop           */
+  --color-accent-cyan:   #00ccff;   /* gradient cyan stop                */
+  --color-accent-mint:   #00c8b3;   /* gradient mint/teal stop           */
+
+  /* ─── Neutral / text ─────────────────────────────────────────── */
+  --color-foreground:    #1e1e1e;   /* body text                         */
+  --color-muted:         #323232;   /* secondary text, input borders     */
+  --color-surface:       #ffffff;   /* card / panel backgrounds          */
+  --color-canvas:        #f4f6fb;   /* page background                   */
+
+  /* ─── Typography ─────────────────────────────────────────────── */
+  --font-sans: 'Poppins', system-ui, sans-serif;
+
+  /* ─── Font sizes (px values from Figma) ──────────────────────── */
+  --text-xs:     0.75rem;    /* 12px — captions                          */
+  --text-xs--line-height: 1.5;
+  --text-sm:     0.875rem;   /* 14px — placeholder / helper text         */
+  --text-sm--line-height: 1.5;
+  --text-base:   1rem;       /* 16px — labels, buttons, body             */
+  --text-base--line-height: 1.5;
+  --text-xl:     1.25rem;    /* 20px — sub-headings                      */
+  --text-xl--line-height: 1.3;
+  --text-2xl:    1.5rem;     /* 24px — section headings                  */
+  --text-2xl--line-height: 1.25;
+  --text-4xl:    2rem;       /* 32px — page headings                     */
+  --text-4xl--line-height: 1.2;
+
+  /* ─── Border radius ──────────────────────────────────────────── */
+  --radius-xs:      0.3125rem;  /* 5px  — checkboxes, tags               */
+  --radius-sm:      0.5rem;     /* 8px  — small components               */
+  --radius-md:      0.75rem;    /* 12px — medium components              */
+  --radius-input:   1.25rem;    /* 20px — text inputs                    */
+  --radius-card:    1.5rem;     /* 24px — cards, panels                  */
+  --radius-pill:    624.9375rem; /* 9999px — full pill buttons           */
+
+  /* ─── Sidebar (dark navy — verify hex against Figma) ─────────── */
+  --color-sidebar:          #0d2060;
+  --color-sidebar-active:   rgba(255, 255, 255, 0.12);
+  --color-sidebar-text:     rgba(255, 255, 255, 0.75);
+  --color-sidebar-text-active: #ffffff;
+
+  /* ─── Shadows ────────────────────────────────────────────────── */
+  --shadow-sm:      0 1px 3px 0 rgb(0 0 0 / 0.08);
+  --shadow-md:      0 4px 16px 0 rgb(0 0 0 / 0.10);
+  --shadow-lg:      0 8px 32px 0 rgb(0 0 0 / 0.14);
+  --shadow-primary: 0 4px 20px 0 rgb(75 117 255 / 0.35);
+}
+
+/* ── Dark theme overrides ──────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --color-foreground: #e0e4f0;
+  --color-muted:      #8a94b0;
+  --color-surface:    #1a1e2e;
+  --color-canvas:     #111420;
+}
+
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    color: var(--color-foreground);
+    background-color: var(--color-canvas);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    min-height: 100dvh;
+  }
+}

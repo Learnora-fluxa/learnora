@@ -16,7 +16,11 @@ async function bootstrap() {
     }),
   )
 
-  const port = process.env.API_PORT ? Number(process.env.API_PORT) : 3000
+  const port = process.env.PORT
+    ? Number(process.env.PORT)
+    : process.env.API_PORT
+      ? Number(process.env.API_PORT)
+      : 3000
   await app.listen(port)
 }
 
