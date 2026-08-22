@@ -16,6 +16,9 @@ CREATE TABLE public.schools (
   state               TEXT,
   phone               TEXT,
   email               TEXT,
+  onboarding_admin_name  TEXT,
+  onboarding_admin_email TEXT,
+  onboarding_admin_phone TEXT,
   created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -175,7 +178,7 @@ CREATE TABLE public.lessons (
   course_id        UUID NOT NULL REFERENCES public.courses(id),
   school_id        UUID NOT NULL REFERENCES public.schools(id),
   title            TEXT NOT NULL,
-  type             TEXT DEFAULT 'video' CHECK (type IN ('video','pdf','text','quiz')),
+  type             TEXT DEFAULT 'video' CHECK (type IN ('video','pdf','audio','document','text','quiz')),
   content_url      TEXT,
   duration_minutes INTEGER,
   position         INTEGER DEFAULT 0,
@@ -233,7 +236,7 @@ CREATE TABLE public.assignment_submissions (
   submission_text TEXT,
   submitted_at    TIMESTAMPTZ DEFAULT NOW(),
   status          TEXT DEFAULT 'submitted'
-                  CHECK (status IN ('pending','submitted','graded','late')),
+                  CHECK (status IN ('draft','pending','submitted','graded','late')),
   UNIQUE (assignment_id, student_id)
 );
 
@@ -374,6 +377,24 @@ CREATE TABLE public.payments (
   paid_at            TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ─── PLATFORM SUBSCRIPTION PAYMENTS ───────────────────────────
+CREATE TABLE public.platform_subscription_payments (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id        UUID NOT NULL REFERENCES public.schools(id) ON DELETE CASCADE,
+  amount           NUMERIC(12,2) NOT NULL,
+  currency         TEXT NOT NULL DEFAULT 'NGN',
+  payment_method   TEXT NOT NULL,
+  reference        TEXT,
+  paid_at          TIMESTAMPTZ NOT NULL,
+  confirmed_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  confirmed_by     UUID REFERENCES public.profiles(id),
+  notes            TEXT,
+  status           TEXT NOT NULL DEFAULT 'confirmed'
+                   CHECK (status IN ('confirmed','rejected','pending_review')),
+  invitation_id    UUID REFERENCES public.invitations(id),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- ─── GRADE SUMMARIES ──────────────────────────────────────────
 CREATE TABLE public.grade_summaries (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -459,6 +480,23 @@ CREATE TABLE public.ai_messages (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ─── AI RESPONSE CACHE ──────────────────────────────────────────
+CREATE TABLE public.ai_response_cache (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id         UUID NOT NULL REFERENCES public.schools(id) ON DELETE CASCADE,
+  cache_key         TEXT NOT NULL UNIQUE,
+  assistant_type    TEXT NOT NULL,
+  task_type         TEXT NOT NULL,
+  prompt_normalized TEXT NOT NULL,
+  response_text     TEXT NOT NULL,
+  model             TEXT NOT NULL,
+  used_fallback     BOOLEAN NOT NULL DEFAULT false,
+  hit_count         INTEGER NOT NULL DEFAULT 0,
+  expires_at        TIMESTAMPTZ NOT NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- ─── PLATFORM SCHOOLS (Super Admin view) ──────────────────────
 CREATE TABLE public.platform_schools (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -509,6 +547,8 @@ CREATE INDEX ON public.attendance_records (class_id, date);
 CREATE INDEX ON public.messages (conversation_id, sent_at);
 CREATE INDEX ON public.notifications (user_id, read);
 CREATE INDEX ON public.invoices (student_id, status);
+CREATE INDEX ON public.platform_subscription_payments (school_id);
+CREATE INDEX ON public.platform_subscription_payments (confirmed_at DESC);
 CREATE INDEX ON public.grade_summaries (student_id, term_id);
 
 -- ─── SCHOOL-ISOLATION RLS (all remaining tables) ──────────────
@@ -523,7 +563,8 @@ BEGIN
     'live_attendance','conversations','conversation_members','messages',
     'fee_structures','invoices','payments','grade_summaries','report_cards',
     'calendar_events','notifications','announcements',
-    'ai_sessions','ai_messages','feature_flags','support_tickets'
+    'ai_sessions','ai_messages','ai_response_cache','feature_flags','support_tickets',
+    'platform_subscription_payments'
   ] LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format(
