@@ -156,14 +156,7 @@ export default function ReportBuilderPage({ onNavigate }: Props) {
       setRows(feeRows)
 
     } else if (metric === 'enrollment') {
-      let q = supabase
-        .from('class_enrollments')
-        .select('class_id, student_id, classes(name)')
-      if (selectedClassId) q = q.eq('class_id', selectedClassId)
-      // Filter by school via classes
-      q = (q as ReturnType<typeof q['eq']>).eq('classes.school_id', schoolId!)
-
-      // Simpler: get classes for school, then count enrollments per class
+      // Get the school's classes first, then count their enrollments.
       const { data: classData } = await supabase
         .from('classes')
         .select('id, name')
