@@ -22,6 +22,15 @@ async function bootstrap() {
       ? Number(process.env.API_PORT)
       : 3000
   await app.listen(port)
+
+  // Make it obvious in the deploy logs which environment and which Supabase
+  // project this instance is actually talking to, so a misconfigured env var
+  // (e.g. a dev deploy pointed at prod, or vice versa) is caught immediately.
+  const nodeEnv = process.env.NODE_ENV ?? 'development'
+  const supabaseHost = process.env.SUPABASE_URL
+    ? new URL(process.env.SUPABASE_URL).host
+    : 'unset'
+  console.log(`[learnora-api] env=${nodeEnv} port=${port} supabase=${supabaseHost}`)
 }
 
 void bootstrap()

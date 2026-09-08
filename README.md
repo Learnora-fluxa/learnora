@@ -19,6 +19,7 @@ Project documentation is organized in [`docs/README.md`](/Users/pecorian/Project
 - [`docs/ARCHITECTURE.md`](/Users/pecorian/Projects/Learnora/learnora/docs/ARCHITECTURE.md): current-state and target-state architecture
 - [`docs/DATA_MODEL.md`](/Users/pecorian/Projects/Learnora/learnora/docs/DATA_MODEL.md): core entities, relationships, and ownership boundaries
 - [`docs/IMPLEMENTATION_ROADMAP.md`](/Users/pecorian/Projects/Learnora/learnora/docs/IMPLEMENTATION_ROADMAP.md): phased execution plan from the current codebase to the target platform
+- [`docs/ENVIRONMENTS.md`](/Users/pecorian/Projects/Learnora/learnora/docs/ENVIRONMENTS.md): dev/prod environment setup for Supabase, Render, and Vercel
 
 Legacy project references still in active use:
 
@@ -51,6 +52,8 @@ npm run dev:api
 Frontend environment variables live in [`apps/web/.env.example`](/Users/pecorian/Projects/Learnora/learnora/apps/web/.env.example).
 
 API environment variables live in [`apps/api/.env.example`](/Users/pecorian/Projects/Learnora/learnora/apps/api/.env.example).
+
+See [`docs/ENVIRONMENTS.md`](/Users/pecorian/Projects/Learnora/learnora/docs/ENVIRONMENTS.md) for how local dev, Vercel, and Render are kept pointed at separate dev/prod Supabase projects so local work never touches production data.
 
 Frontend env vars:
 

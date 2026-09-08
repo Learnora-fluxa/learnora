@@ -1,0 +1,76 @@
+# Optional infrastructure-as-code reference for the Render side of
+# docs/ENVIRONMENTS.md. Importing this as a Blueprint (Render dashboard ->
+# New -> Blueprint) creates the two services below; it will NOT touch an
+# existing manually-created service unless its name matches exactly, so it's
+# safe to leave unused if you'd rather create `learnora-api-dev` by hand.
+#
+# Every secret is `sync: false`, meaning Render prompts you to fill it in by
+# hand in the dashboard rather than storing it in this file or the repo.
+services:
+  - type: web
+    name: learnora-api
+    runtime: node
+    branch: main
+    buildCommand: npm install && npm run build -w apps/api
+    startCommand: npm run start -w apps/api
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: OPENAI_MODEL
+        value: gpt-5-mini
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: API_PUBLIC_BASE_URL
+        sync: false
+      - key: PAYSTACK_PUBLIC_KEY
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: DAILY_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: REDIS_URL
+        sync: false
+
+  - type: web
+    name: learnora-api-dev
+    runtime: node
+    branch: dev
+    buildCommand: npm install && npm run build -w apps/api
+    startCommand: npm run start -w apps/api
+    envVars:
+      - key: NODE_ENV
+        value: development
+      - key: OPENAI_MODEL
+        value: gpt-5-mini
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: API_PUBLIC_BASE_URL
+        sync: false
+      - key: PAYSTACK_PUBLIC_KEY
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: DAILY_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: REDIS_URL
+        sync: false

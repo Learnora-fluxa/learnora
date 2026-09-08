@@ -8,4 +8,11 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in environment variables')
 }
 
+// Dev-only visibility: prints which Supabase project this build is pointed
+// at, so it's obvious if a local run or preview deploy is accidentally
+// wired to the wrong (e.g. production) project. Never logs the key.
+if (import.meta.env.DEV) {
+  console.info(`[learnora-web] Supabase project: ${new URL(supabaseUrl).host}`)
+}
+
 export const supabase = createClient<Database>(supabaseUrl, supabaseKey)
