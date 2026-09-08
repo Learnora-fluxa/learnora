@@ -12,7 +12,11 @@ if (!supabaseUrl || !supabaseKey) {
 // at, so it's obvious if a local run or preview deploy is accidentally
 // wired to the wrong (e.g. production) project. Never logs the key.
 if (import.meta.env.DEV) {
-  console.info(`[learnora-web] Supabase project: ${new URL(supabaseUrl).host}`)
+  try {
+    console.info(`[learnora-web] Supabase project: ${new URL(supabaseUrl).host}`)
+  } catch {
+    console.info('[learnora-web] Supabase project: (unable to parse VITE_SUPABASE_URL)')
+  }
 }
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseKey)

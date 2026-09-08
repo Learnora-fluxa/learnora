@@ -27,9 +27,14 @@ async function bootstrap() {
   // project this instance is actually talking to, so a misconfigured env var
   // (e.g. a dev deploy pointed at prod, or vice versa) is caught immediately.
   const nodeEnv = process.env.NODE_ENV ?? 'development'
-  const supabaseHost = process.env.SUPABASE_URL
-    ? new URL(process.env.SUPABASE_URL).host
-    : 'unset'
+  let supabaseHost = 'unset'
+  if (process.env.SUPABASE_URL) {
+    try {
+      supabaseHost = new URL(process.env.SUPABASE_URL).host
+    } catch {
+      supabaseHost = 'invalid-url'
+    }
+  }
   console.log(`[learnora-api] env=${nodeEnv} port=${port} supabase=${supabaseHost}`)
 }
 
