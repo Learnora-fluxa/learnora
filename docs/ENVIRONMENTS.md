@@ -14,58 +14,64 @@ about it needs to change for that.
 
 ## 1. Create the new production project and migrate schema + admin accounts
 
-This uses `pg_dump`/`psql` directly against Postgres rather than pasting `schema.sql` by
-hand, so the new project gets the database's *actual* current structure -- not whatever
-`schema.sql` says, which can drift out of sync (that's exactly what caused the
-`onboarding_admin_email` PGRST204 error earlier).
+This is done entirely through each project's SQL Editor in the Supabase dashboard --
+no `pg_dump`/`psql`, no terminal, and no database password (the SQL Editor
+authenticates with your Supabase account login, which is a separate credential from
+the Postgres database password). If you ever *do* want to use `pg_dump` later, the
+database password is resettable anytime from Settings -> Database -> "Reset database
+password" -- you don't need to recall the old one for that to work.
 
-You'll need `pg_dump` and `psql` installed locally (Postgres 17 client tools, matching
-current Supabase): `brew install libpq && brew link --force libpq` on macOS.
+### 1a. Create the new project
 
-### 1a. Create the project and get both connection strings
+Supabase dashboard -> New project. This is the one that will become production.
 
-1. Supabase dashboard -> New project. This is the one that will become production.
-2. For **both** the old and new projects: Settings -> Database -> Connection string ->
-   copy the **Direct connection** URI (port 5432, not the 6543 pooler -- `pg_dump`
-   needs a direct session connection). You'll be prompted for each project's database
-   password there too.
+### 1b. Confirm the live schema before copying it
 
-Keep both URIs somewhere temporary on your machine (not in a repo file, not pasted into
-chat) -- each contains a database password.
+`supabase/schema.sql` is meant to mirror the database, but it can drift (that's what
+caused the `onboarding_admin_email` PGRST204 error earlier) -- so check it against the
+real thing first. In the **old** project's SQL Editor, run:
 
-### 1b. Dump and restore the schema (structure only, no rows)
-
-```bash
-pg_dump "postgresql://postgres:[OLD_DB_PASSWORD]@[OLD_HOST]:5432/postgres" \
-  --schema=public --schema-only --no-owner --no-privileges \
-  -f public_schema.sql
-
-psql "postgresql://postgres:[NEW_DB_PASSWORD]@[NEW_HOST]:5432/postgres" \
-  -f public_schema.sql
+```sql
+select table_name, column_name, data_type
+from information_schema.columns
+where table_schema = 'public'
+order by table_name, ordinal_position;
 ```
 
-`--schema=public` deliberately excludes Supabase's own internal schemas (`auth`,
-`storage`, `realtime`, etc.) -- those already exist, fully configured, in every new
-project, and copying them risks version mismatches between projects created at
-different times. `--no-owner --no-privileges` skips role/ownership statements, since
-Supabase provisions the same roles (`anon`, `authenticated`, `service_role`, ...)
-identically in every project -- there's nothing to migrate there.
+Skim the result for anything `supabase/schema.sql` doesn't account for. If you find a
+gap, paste the result back and it can be reconciled before moving on -- better to catch
+drift now than to recreate the same bug in the new project.
 
-Check the new project's Table Editor afterward: every table, function, and RLS policy
-from `supabase/migrations/` should now be present.
+### 1c. Create the schema in the new project
 
-### 1c. Copy the schools those admins belong to
+Open the **new** project's SQL Editor and paste in the full contents of
+[`supabase/schema.sql`](../supabase/schema.sql), then run it. Check the new project's
+Table Editor afterward -- every table, function, and RLS policy should now be present.
 
-Admin profiles reference a `school_id` -- copy just those specific school rows so the
-foreign key resolves:
+### 1d. Copy the schools those admins belong to
 
-```bash
-psql "postgresql://postgres:[OLD_DB_PASSWORD]@[OLD_HOST]:5432/postgres" -c "\copy (select s.* from public.schools s where s.id in (select school_id from public.profiles where role in ('admin','super_admin') and school_id is not null)) to 'schools_seed.csv' with csv"
+Admin profiles reference a `school_id` -- copy just those rows. In the **old**
+project's SQL Editor, run:
 
-psql "postgresql://postgres:[NEW_DB_PASSWORD]@[NEW_HOST]:5432/postgres" -c "\copy public.schools from 'schools_seed.csv' with csv"
+```sql
+select format(
+  'insert into public.schools (id, name, code, logo_url, subscription_plan, subscription_status, student_count, address, state, phone, email, onboarding_admin_name, onboarding_admin_email, onboarding_admin_phone, created_at) values (%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L);',
+  id, name, code, logo_url, subscription_plan, subscription_status, student_count,
+  address, state, phone, email, onboarding_admin_name, onboarding_admin_email,
+  onboarding_admin_phone, created_at
+) as insert_statement
+from public.schools
+where id in (
+  select school_id from public.profiles
+  where role in ('admin', 'super_admin') and school_id is not null
+);
 ```
 
-### 1d. Migrate the admin/super_admin accounts
+This returns one ready-to-run `insert` statement per row (using Postgres's `format(...,
+%L)`, which safely quotes every value for you). Copy the `insert_statement` column's
+text and run it in the **new** project's SQL Editor.
+
+### 1e. Migrate the admin/super_admin accounts
 
 Don't copy `auth.users` rows directly -- Supabase manages that schema internally and its
 shape isn't guaranteed to match between two independently-created projects, so hand-copying
@@ -89,7 +95,7 @@ Supabase never exposes the raw password, only a project-specific hash).
 Everyone else (students, parents, teachers) is *not* migrated -- they'll be created
 fresh in the new production project going forward.
 
-### 1e. Double-check before cutting over
+### 1f. Double-check before cutting over
 
 - Log into the new project's dashboard -> Auth -> Users and confirm the admin accounts
   are there.
