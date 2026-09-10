@@ -3,52 +3,103 @@
 Learnora runs on three services that each need a separate "production" and "development"
 instance: **Supabase** (database + auth + storage + edge functions), **Render** (the
 `apps/api` NestJS service), and **Vercel** (the `apps/web` frontend). This doc is the
-runbook for setting that split up, and the checklist for staying safe once it exists.
+runbook for that split, and the checklist for staying safe once it exists.
 
-Before this change there was only one Supabase project, and local development, Render,
-and Vercel all pointed at it -- so testing locally or on a preview branch could read or
-write real school data. The steps below fix that.
+The plan: the Supabase project you already have becomes the **dev** project (it already
+has the real schema and is fine to keep experimenting against). A brand-new Supabase
+project becomes **production** -- clean, with just the schema and the admin/super_admin
+accounts carried over, not the rest of the data. Once traffic is cut over to it, the old
+project's job changes from "the live database" to "the thing dev points at" -- nothing
+about it needs to change for that.
 
-## 1. Supabase: create the dev project
+## 1. Create the new production project and migrate schema + admin accounts
 
-1. First, make sure **production** is fully up to date: open the SQL Editor on your
-   existing (production) Supabase project and confirm every file in
-   [`supabase/migrations/`](../supabase/migrations) has been applied -- run
-   `select column_name from information_schema.columns where table_name = 'schools'`
-   and diff it against `supabase/schema.sql` if you're not sure. Do this first so the
-   dev project you create next starts from the same schema as prod, not an older one.
-2. In the Supabase dashboard, create a **new project** -- name it something like
-   `learnora-dev`. Same org, a region close to you is fine (it doesn't need to match
-   prod's region).
-3. Open its SQL Editor and paste in the full [`supabase/schema.sql`](../supabase/schema.sql)
-   to create every table, function, and policy fresh. (This file is meant to be pasted
-   wholesale into a brand-new project -- see the comment at its top.)
-4. Create your own super-admin user in this dev project the same way described in
-   [`docs/legacy/HANDOFF.md`](legacy/HANDOFF.md): sign up normally, then in the SQL
-   editor run
-   ```sql
-   update public.profiles set role = 'super_admin', school_id = null, full_name = 'Dev Admin'
-   where email = 'you@example.com';
-   ```
-5. Leave email confirmation disabled on dev (fine for testing). **Double check it's
-   enabled on production** -- this was flagged in the legacy notes as a pre-production
-   TODO and is worth confirming now while you're setting this up.
-6. From the dev project's Settings -> API, copy:
-   - Project URL
-   - `anon` public key
-   - `service_role` key
-   - JWT secret (Settings -> API -> JWT Settings)
+This uses `pg_dump`/`psql` directly against Postgres rather than pasting `schema.sql` by
+hand, so the new project gets the database's *actual* current structure -- not whatever
+`schema.sql` says, which can drift out of sync (that's exactly what caused the
+`onboarding_admin_email` PGRST204 error earlier).
 
-   Keep these next to your existing prod values -- you'll paste them into local env
-   files, Vercel, and Render below, and nowhere else.
+You'll need `pg_dump` and `psql` installed locally (Postgres 17 client tools, matching
+current Supabase): `brew install libpq && brew link --force libpq` on macOS.
 
-From now on, any new file added to `supabase/migrations/` should be run against **dev
-first**, verified, then run against **prod**. The migrations folder stays the single
-source of truth for what each project's schema should look like; `schema.sql` should be
-updated to match whenever you add a migration, so a brand-new project can still be
-bootstrapped from one paste.
+### 1a. Create the project and get both connection strings
 
-## 2. Local development
+1. Supabase dashboard -> New project. This is the one that will become production.
+2. For **both** the old and new projects: Settings -> Database -> Connection string ->
+   copy the **Direct connection** URI (port 5432, not the 6543 pooler -- `pg_dump`
+   needs a direct session connection). You'll be prompted for each project's database
+   password there too.
+
+Keep both URIs somewhere temporary on your machine (not in a repo file, not pasted into
+chat) -- each contains a database password.
+
+### 1b. Dump and restore the schema (structure only, no rows)
+
+```bash
+pg_dump "postgresql://postgres:[OLD_DB_PASSWORD]@[OLD_HOST]:5432/postgres" \
+  --schema=public --schema-only --no-owner --no-privileges \
+  -f public_schema.sql
+
+psql "postgresql://postgres:[NEW_DB_PASSWORD]@[NEW_HOST]:5432/postgres" \
+  -f public_schema.sql
+```
+
+`--schema=public` deliberately excludes Supabase's own internal schemas (`auth`,
+`storage`, `realtime`, etc.) -- those already exist, fully configured, in every new
+project, and copying them risks version mismatches between projects created at
+different times. `--no-owner --no-privileges` skips role/ownership statements, since
+Supabase provisions the same roles (`anon`, `authenticated`, `service_role`, ...)
+identically in every project -- there's nothing to migrate there.
+
+Check the new project's Table Editor afterward: every table, function, and RLS policy
+from `supabase/migrations/` should now be present.
+
+### 1c. Copy the schools those admins belong to
+
+Admin profiles reference a `school_id` -- copy just those specific school rows so the
+foreign key resolves:
+
+```bash
+psql "postgresql://postgres:[OLD_DB_PASSWORD]@[OLD_HOST]:5432/postgres" -c "\copy (select s.* from public.schools s where s.id in (select school_id from public.profiles where role in ('admin','super_admin') and school_id is not null)) to 'schools_seed.csv' with csv"
+
+psql "postgresql://postgres:[NEW_DB_PASSWORD]@[NEW_HOST]:5432/postgres" -c "\copy public.schools from 'schools_seed.csv' with csv"
+```
+
+### 1d. Migrate the admin/super_admin accounts
+
+Don't copy `auth.users` rows directly -- Supabase manages that schema internally and its
+shape isn't guaranteed to match between two independently-created projects, so hand-copying
+it is fragile and unsupported. Instead, [`scripts/migrate-admin-accounts.mjs`](../scripts/migrate-admin-accounts.mjs)
+uses the Auth Admin API to recreate just the admin/super_admin accounts in the new
+project and carry their `profiles` row over under the new user id:
+
+```bash
+cd apps/api
+SOURCE_SUPABASE_URL=https://<old-project-ref>.supabase.co \
+SOURCE_SUPABASE_SERVICE_ROLE_KEY=<old-service-role-key> \
+TARGET_SUPABASE_URL=https://<new-project-ref>.supabase.co \
+TARGET_SUPABASE_SERVICE_ROLE_KEY=<new-service-role-key> \
+node ../../scripts/migrate-admin-accounts.mjs
+```
+
+It prints a password-reset link per migrated account -- send each admin their link so
+they can set a password on the new project (their old password can't be carried over;
+Supabase never exposes the raw password, only a project-specific hash).
+
+Everyone else (students, parents, teachers) is *not* migrated -- they'll be created
+fresh in the new production project going forward.
+
+### 1e. Double-check before cutting over
+
+- Log into the new project's dashboard -> Auth -> Users and confirm the admin accounts
+  are there.
+- Re-run the check from the earlier PGRST204 fix against the *new* project to confirm
+  the schema matches: `select column_name from information_schema.columns where
+  table_name = 'schools'`.
+- Enable email confirmation on the new project's Auth settings before real users sign up
+  (the old project had this disabled for testing -- don't carry that forward).
+
+## 2. Local development## 2. Local development
 
 Both apps now load environment-specific files automatically, most-specific first:
 
@@ -70,48 +121,51 @@ There is deliberately no `.env.production.local` -- nobody should be running a l
 dev server against production data. The `.env.production.example` files exist purely
 as a reference for what Vercel/Render need set, documented below.
 
-## 3. Vercel (apps/web)
+## 3. Vercel (apps/web) -- the cutover
 
 Vercel already separates deployments into **Production** (the `main` branch) and
-**Preview** (every other branch, including `dev`). Use that:
+**Preview** (every other branch, including `dev`). Because production is *moving* to
+the new Supabase project rather than starting from nothing, do this in order so dev
+never goes down and the cutover is one deliberate step:
 
-1. Project Settings -> Environment Variables.
-2. Add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_BASE_URL` scoped to
-   **Production only**, with your existing prod values (they're probably already
-   there -- just confirm the scope).
-3. Add the same three keys again, scoped to **Preview**, and under "Branch" restrict
-   them to the `dev` branch specifically (Vercel lets you limit a Preview env var to
-   selected branches). Use your dev Supabase project's URL/key and the dev Render
-   API URL from step 4.
-4. Leave `VITE_API_BASE_URL` for Preview pointing at the `learnora-api-dev` Render
-   service you create below, not the production API.
+1. Project Settings -> Environment Variables. Note down the current **Production**
+   values of `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` -- these are today's (soon
+   to be old/dev) project's values.
+2. Add those same three keys scoped to **Preview**, restricted to the `dev` branch
+   specifically (Vercel lets you limit a Preview env var to selected branches). So
+   `dev` now points at what production used to point at -- nothing changes for it.
+3. Only once 1b-1e above are done and verified: edit the **Production**-scoped
+   `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` in place to the **new** project's
+   values, and redeploy `main`. This is the actual moment production switches over.
 
-Any other preview deploy (a random feature-branch PR) will fall back to whatever
-Preview default you set -- point that at dev too, so a stray PR preview can never
-reach prod.
+Any other preview deploy (a random feature-branch PR) falls back to whatever Preview
+default you set in step 2 -- so a stray PR preview lands on dev, never on prod.
 
-## 4. Render (apps/api)
+## 4. Render (apps/api) -- the cutover
 
-Create a second Web Service rather than touching your existing one:
+Same idea, applied to your existing `apps/api` service:
 
-1. Render dashboard -> New -> Web Service -> same GitHub repo.
-2. Branch: `dev`. Name: `learnora-api-dev`.
-3. Build command: `npm install && npm run build -w apps/api`
-   Start command: `npm run start -w apps/api`
-4. Environment variables -- set every key from `apps/api/.env.production.example`'s
-   list, but with your **dev** Supabase project's values and `NODE_ENV=development`.
+1. Open your existing Render service's Environment tab and note its current
+   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_JWT_SECRET` -- today's
+   (soon to be dev) project's values.
+2. Create a **new** Web Service (Render dashboard -> New -> Web Service -> same
+   GitHub repo), branch `dev`, name `learnora-api-dev`, build command
+   `npm install && npm run build -w apps/api`, start command `npm run start -w apps/api`.
+   Paste in the values you just noted, with `NODE_ENV=development`. This is now your
+   dev API, unchanged from what production used to be.
+3. Only once 1b-1e above are done and verified: edit your **existing** service's
+   `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_JWT_SECRET` in place to the
+   **new** project's values and redeploy. Same service, same URL your users already
+   hit -- just pointed at the new database.
 
 A [`render.yaml`](../render.yaml) blueprint is included in the repo root as an
-optional, non-destructive alternative: it describes both a `learnora-api` (main) and
-`learnora-api-dev` (dev) service so the whole setup is reproducible from one file. It
-only creates services when you explicitly import it as a Blueprint in Render -- it
-will not touch your existing manually-created service unless its name matches exactly.
-Secret values are marked `sync: false`, meaning Render will prompt you to fill them in
-by hand rather than storing them in the repo.
+optional reference for what both services should look like end-state; it's not
+required for the cutover above.
 
 Once both services exist, `apps/api/src/main.ts` logs the environment and the
-Supabase project host it's connected to on every boot -- check the Render logs after
-a deploy to confirm each service is talking to the right project.
+Supabase project host it's connected to on every boot -- check the Render logs
+immediately after step 3 to confirm the switch actually took (`supabase=` should show
+the new project's host).
 
 ## 5. Git workflow
 
