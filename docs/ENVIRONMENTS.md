@@ -99,7 +99,7 @@ fresh in the new production project going forward.
 - Enable email confirmation on the new project's Auth settings before real users sign up
   (the old project had this disabled for testing -- don't carry that forward).
 
-## 2. Local development## 2. Local development
+## 2. Local development
 
 Both apps now load environment-specific files automatically, most-specific first:
 
