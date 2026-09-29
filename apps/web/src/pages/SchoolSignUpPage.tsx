@@ -1,17 +1,14 @@
-import { useState, useEffect } from 'react'
-import { ChevronRight, Eye, EyeOff, CheckCircle2, Copy, Building2, CreditCard, Landmark, AlertCircle, Loader2 } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronRight, Eye, EyeOff, CheckCircle2, Copy, Building2, Sparkles, Loader2 } from 'lucide-react'
 import AuthHeroPanel from '../components/auth/AuthHeroPanel'
-import { supabase } from '../lib/supabase'
-import { generateSchoolCode } from '../lib/auth'
-import { logSupabaseError } from '../lib/supabaseError'
+import { registerSchool } from '../lib/schoolRegistration'
 
 type Props = { onNavigate: (page: string) => void }
-type Step = 'school' | 'admin' | 'payment' | 'done'
+type Step = 'school' | 'admin' | 'done'
 
 const steps: { key: Step; label: string }[] = [
   { key: 'school',  label: 'School Info'  },
   { key: 'admin',   label: 'Admin Setup'  },
-  { key: 'payment', label: 'Payment'      },
   { key: 'done',    label: 'All Set'      },
 ]
 
@@ -45,26 +42,10 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
   const [password,   setPassword]   = useState('')
   const [confirmPw,  setConfirmPw]  = useState('')
 
-  // Payment
-  const [payMethod,    setPayMethod]    = useState<'paystack' | 'bank_transfer'>('paystack')
-  const [platformBank, setPlatformBank] = useState({ bankName: '', acctName: '', acctNumber: '' })
-
   // Stored after successful registration
   const [schoolCode, setSchoolCode] = useState('')
 
   const stepIndex = steps.findIndex(s => s.key === step)
-
-  useEffect(() => {
-    if (step === 'payment') {
-      supabase.from('platform_config')
-        .select('bank_name, bank_account_name, bank_account_number')
-        .maybeSingle()
-        .then(({ data }) => {
-          const d = data as { bank_name: string | null; bank_account_name: string | null; bank_account_number: string | null } | null
-          if (d) setPlatformBank({ bankName: d.bank_name ?? '', acctName: d.bank_account_name ?? '', acctNumber: d.bank_account_number ?? '' })
-        })
-    }
-  }, [step])
 
   function copyCode() {
     navigator.clipboard.writeText(schoolCode).catch(() => {})
@@ -77,104 +58,31 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
     setError('')
     if (password !== confirmPw) { setError('Passwords do not match.'); return }
     if (password.length < 8)    { setError('Password must be at least 8 characters.'); return }
-    setStep('payment')
+    void handleRegister()
   }
 
   async function handleRegister() {
     setError('')
     setLoading(true)
     try {
-      // 1. Create auth user
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({
-        email: adminEmail,
+      // The API creates the auth user, school, admin profile and starter data
+      // in one step with the service role, and rolls back if any part fails.
+      const { school } = await registerSchool({
+        schoolName,
+        schoolEmail,
+        schoolPhone,
+        schoolAddress,
+        schoolState,
+        adminName,
+        adminEmail,
+        adminPhone,
         password,
-        options: { data: { full_name: adminName } },
-      })
-      if (signUpError) throw signUpError
-      if (!authData.user) throw new Error('Sign up failed — no user returned.')
-
-      const userId = authData.user.id
-
-      // 2. Generate school ID + code client-side to avoid the RLS chicken-and-egg:
-      //    the schools_read policy checks get_my_school_id(), but the profile hasn't
-      //    been updated with school_id yet at this point, so a SELECT after INSERT
-      //    would return 0 rows. Pre-generating the ID lets us skip the SELECT entirely.
-      const schoolId = crypto.randomUUID()
-      const code     = generateSchoolCode(schoolName)
-      const { error: schoolError } = await supabase
-        .from('schools')
-        .insert({
-          id:                           schoolId,
-          name:                         schoolName,
-          code,
-          email:                        schoolEmail,
-          phone:                        schoolPhone,
-          address:                      schoolAddress,
-          state:                        schoolState,
-          onboarding_admin_name:        adminName,
-          onboarding_admin_email:       adminEmail,
-          onboarding_admin_phone:       adminPhone,
-          subscription_status:          payMethod === 'bank_transfer' ? 'pending_payment' : 'active',
-          subscription_payment_method:  payMethod,
-        })
-
-      if (schoolError) throw schoolError
-
-      // 3. Update profile with school_id, role, name, phone
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          school_id: schoolId,
-          role:      'admin',
-          full_name: adminName,
-          email:     adminEmail,
-          phone:     adminPhone,
-        })
-        .eq('id', userId)
-
-      if (profileError) throw profileError
-
-      // Auto-seed: term, subjects, starter class
-      const now = new Date()
-      const yr  = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1
-      await supabase.from('terms').insert({
-        school_id:  schoolId,
-        name:       `First Term ${yr}/${yr + 1}`,
-        start_date: `${yr}-09-01`,
-        end_date:   `${yr + 1}-01-31`,
-        is_current: true,
+        redirectTo:    `${window.location.origin}/login`,
       })
 
-      const defaultSubjects = [
-        'Mathematics', 'English Language', 'Basic Science', 'Social Studies',
-        'Civic Education', 'Computer Science', 'French', 'Physical Education',
-        'Christian Religious Studies', 'Further Mathematics',
-      ]
-      const { data: subRows } = await supabase
-        .from('subjects')
-        .insert(defaultSubjects.map(name => ({ name, school_id: schoolId })))
-        .select('id, name')
-
-      // One starter class (SS1A) with all subjects
-      if (subRows && subRows.length > 0) {
-        const { data: cls } = await supabase
-          .from('classes')
-          .insert({ school_id: schoolId, name: 'SS1A', level: 'SS1', arm: 'A' })
-          .select('id')
-          .single()
-        if (cls) {
-          await supabase.from('class_subjects').insert(
-            subRows.map((s: { id: string; name: string }) => ({
-              class_id: cls.id, subject_id: s.id, school_id: schoolId,
-            }))
-          )
-        }
-      }
-
-      setSchoolCode(code)
+      setSchoolCode(school.code)
       setStep('done')
     } catch (err: unknown) {
-      logSupabaseError('SchoolSignUp', err as any)
       const msg = err instanceof Error ? err.message : 'Registration failed. Please try again.'
       setError(msg)
     } finally {
@@ -302,7 +210,7 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
             <>
               <div className="mb-6">
                 <h1 className="text-2xl font-semibold text-foreground leading-tight mb-1">Admin Account</h1>
-                <p className="text-sm text-muted">Step 2 of 3 — Primary administrator for {schoolName || 'your school'}.</p>
+                <p className="text-sm text-muted">Step 2 of 2 — Primary administrator for {schoolName || 'your school'}.</p>
               </div>
 
               {error && (
@@ -379,98 +287,20 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 h-12 bg-primary text-white text-sm font-bold rounded-pill hover:bg-primary-deep transition-colors shadow-primary flex items-center justify-center gap-2"
+                    disabled={loading}
+                    className="flex-1 h-12 bg-primary text-white text-sm font-bold rounded-pill hover:bg-primary-deep transition-colors shadow-primary flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <span>Continue</span><ChevronRight size={15} />
+                    {loading
+                      ? <><Loader2 size={15} className="animate-spin" /> Registering…</>
+                      : 'Register School'
+                    }
                   </button>
                 </div>
               </form>
             </>
           )}
 
-          {/* ── Step 3: Payment ── */}
-          {step === 'payment' && (
-            <>
-              <div className="mb-6">
-                <h1 className="text-2xl font-semibold text-foreground leading-tight mb-1">Subscription Payment</h1>
-                <p className="text-sm text-muted">Step 3 of 3 — Choose how you'll pay the platform subscription.</p>
-              </div>
-
-              {error && (
-                <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>
-              )}
-
-              <div className="flex flex-col gap-3 mb-6">
-                {[
-                  { id: 'paystack'      as const, icon: CreditCard, label: 'Online (Paystack)',       sub: 'Your school is activated immediately after signup.'         },
-                  { id: 'bank_transfer' as const, icon: Landmark,   label: 'Bank Transfer (Offline)', sub: 'Transfer to Learnora. Activated after payment is confirmed.' },
-                ].map(m => (
-                  <button key={m.id} onClick={() => setPayMethod(m.id)}
-                    className={`flex items-center gap-4 p-4 rounded-card border-2 text-left transition-colors ${payMethod === m.id ? 'border-primary bg-primary/5' : 'border-black/10 hover:border-primary/30'}`}>
-                    <div className={`size-10 rounded-full flex items-center justify-center shrink-0 ${payMethod === m.id ? 'bg-primary text-white' : 'bg-canvas text-muted'}`}>
-                      <m.icon size={18} />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-bold text-foreground">{m.label}</p>
-                      <p className="text-xs text-muted mt-0.5">{m.sub}</p>
-                    </div>
-                    <div className={`size-5 rounded-full border-2 shrink-0 flex items-center justify-center ${payMethod === m.id ? 'border-primary bg-primary' : 'border-black/20'}`}>
-                      {payMethod === m.id && <div className="size-2 bg-white rounded-full" />}
-                    </div>
-                  </button>
-                ))}
-
-                {payMethod === 'bank_transfer' && (
-                  <div className="bg-canvas border border-black/10 rounded-card p-4 flex flex-col gap-2 mt-1">
-                    <p className="text-xs font-bold text-muted uppercase tracking-wider mb-1">Transfer to Learnora</p>
-                    {platformBank.acctNumber ? (
-                      <>
-                        {[
-                          { label: 'Bank',           value: platformBank.bankName   || '—' },
-                          { label: 'Account Name',   value: platformBank.acctName   || '—' },
-                          { label: 'Account Number', value: platformBank.acctNumber        },
-                        ].map(r => (
-                          <div key={r.label} className="flex justify-between text-sm">
-                            <span className="text-muted">{r.label}</span>
-                            <span className={`font-bold text-foreground ${r.label === 'Account Number' ? 'font-mono tracking-widest' : ''}`}>{r.value}</span>
-                          </div>
-                        ))}
-                        <p className="text-[11px] text-muted mt-1">Use your school name as the transfer reference. Your account will be activated after Learnora confirms receipt.</p>
-                      </>
-                    ) : (
-                      <div className="flex items-start gap-2">
-                        <AlertCircle size={13} className="text-amber-500 shrink-0 mt-0.5" />
-                        <p className="text-xs text-amber-700">Bank details not available. Contact Learnora support for payment instructions.</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => { setStep('admin'); setError('') }}
-                  className="h-12 px-5 border border-black/20 text-foreground text-sm font-semibold rounded-pill hover:border-primary hover:text-primary transition-colors"
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRegister}
-                  disabled={loading}
-                  className="flex-1 h-12 bg-primary text-white text-sm font-bold rounded-pill hover:bg-primary-deep transition-colors shadow-primary flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {loading
-                    ? <><Loader2 size={15} className="animate-spin" /> Registering…</>
-                    : payMethod === 'bank_transfer' ? 'Register School' : 'Register School'
-                  }
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* ── Step 4: Done ── */}
+          {/* ── Done ── */}
           {step === 'done' && (
             <div className="text-center">
               <div className="size-16 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-6">
@@ -481,14 +311,12 @@ export default function SchoolSignUpPage({ onNavigate }: Props) {
               <p className="text-sm text-muted mb-4 max-w-[380px] mx-auto">
                 <strong>{schoolName}</strong> has been created. Check your inbox at <strong>{adminEmail}</strong> to confirm your email, then log in.
               </p>
-              {payMethod === 'bank_transfer' && (
-                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-card px-4 py-3 mb-6 text-left">
-                  <AlertCircle size={14} className="text-amber-600 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-800 leading-relaxed">
-                    Your account is <strong>pending activation</strong>. Learnora will activate your school once your bank transfer is confirmed. You can still log in and explore the platform.
-                  </p>
-                </div>
-              )}
+              <div className="flex items-start gap-2 bg-primary/5 border border-primary/15 rounded-card px-4 py-3 mb-6 text-left">
+                <Sparkles size={14} className="text-primary shrink-0 mt-0.5" />
+                <p className="text-xs text-foreground leading-relaxed">
+                  Your <strong>30-day free trial</strong> has started. Choose a subscription any time from <strong>Subscription &amp; Billing</strong> on your dashboard.
+                </p>
+              </div>
 
               {/* School code box */}
               <div className="bg-canvas rounded-card border border-black/10 p-5 mb-6 text-left">
