@@ -15,4 +15,6 @@ export const envSchema = z.object({
   SENTRY_DSN: z.string().optional(),
   REDIS_URL: z.string().optional(),
   OPENAI_MODEL: z.string().optional(),
+  // Enables POST /api/platform/super-admins/bootstrap (first super admin only).
+  SUPER_ADMIN_BOOTSTRAP_SECRET: z.string().min(32).optional(),
 })
