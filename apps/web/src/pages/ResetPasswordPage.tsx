@@ -1,11 +1,27 @@
-import { useState } from 'react'
-import { Eye, EyeOff, CheckCircle2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Eye, EyeOff, CheckCircle2, AlertTriangle } from 'lucide-react'
 import AuthHeroPanel from '../components/auth/AuthHeroPanel'
 import { supabase } from '../lib/supabase'
 
 type Props = { onNavigate: (page: string) => void }
 
+type LinkStatus = 'checking' | 'ready' | 'invalid'
+
+// Supabase reports a bad recovery link (expired, already used, etc.) in the
+// URL hash or query string instead of creating a session.
+function readLinkError(): string | null {
+  const params = new URLSearchParams(window.location.hash.slice(1) || window.location.search)
+  if (!params.get('error') && !params.get('error_code')) return null
+  if (params.get('error_code') === 'otp_expired') {
+    return 'This reset link has expired or has already been used.'
+  }
+  return params.get('error_description')?.replace(/\+/g, ' ') || 'This reset link is invalid.'
+}
+
 export default function ResetPasswordPage({ onNavigate }: Props) {
+  const [urlError]                    = useState(readLinkError)
+  const [linkStatus,  setLinkStatus]  = useState<LinkStatus>(urlError ? 'invalid' : 'checking')
+  const [linkError,   setLinkError]   = useState(urlError ?? '')
   const [password,    setPassword]    = useState('')
   const [confirm,     setConfirm]     = useState('')
   const [showPw,      setShowPw]      = useState(false)
@@ -21,14 +37,46 @@ export default function ResetPasswordPage({ onNavigate }: Props) {
     { label: 'Passwords match',       met: confirm.length > 0 && password === confirm },
   ]
 
+  useEffect(() => {
+    if (urlError) return
+
+    // getSession() waits for supabase-js to finish exchanging the recovery
+    // token in the URL, so a missing session here means the link didn't work.
+    let cancelled = false
+    supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return
+      if (data.session) {
+        setLinkStatus('ready')
+      } else {
+        setLinkError('This reset link is invalid or has expired.')
+        setLinkStatus('invalid')
+      }
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' && session) setLinkStatus('ready')
+    })
+
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+    }
+  }, [urlError])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!rules.every(r => r.met)) return
     setLoading(true)
     setError('')
     const { error: err } = await supabase.auth.updateUser({ password })
+    if (err) {
+      setLoading(false)
+      setError(err.message)
+      return
+    }
+    // End the recovery session so the user signs in fresh with the new password.
+    await supabase.auth.signOut()
     setLoading(false)
-    if (err) { setError(err.message); return }
     setDone(true)
   }
 
@@ -41,7 +89,29 @@ export default function ResetPasswordPage({ onNavigate }: Props) {
       <div className="flex-1 flex items-center justify-center px-6 py-10 lg:py-0 lg:px-12">
         <div className="w-full max-w-[500px]">
 
-          {done ? (
+          {linkStatus === 'checking' && !done ? (
+            <p className="text-center text-base text-muted">Verifying your reset link…</p>
+          ) : linkStatus === 'invalid' && !done ? (
+            <div className="text-center">
+              <div className="size-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-6">
+                <AlertTriangle size={28} className="text-red-500" />
+              </div>
+              <h1 className="text-3xl font-semibold text-foreground mb-3">Link Not Valid</h1>
+              <p className="text-base text-muted mb-8">{linkError} Request a new link to reset your password.</p>
+              <button
+                onClick={() => onNavigate('forgot-password')}
+                className="w-full h-14 bg-primary text-white text-base font-semibold rounded-pill hover:bg-primary-deep transition-colors shadow-primary"
+              >
+                Request New Link
+              </button>
+              <button
+                onClick={() => onNavigate('login')}
+                className="mt-4 w-full h-12 text-sm text-muted hover:text-foreground transition-colors"
+              >
+                Back to Sign In
+              </button>
+            </div>
+          ) : done ? (
             <div className="text-center">
               <div className="size-16 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-6">
                 <CheckCircle2 size={28} className="text-green-600" />

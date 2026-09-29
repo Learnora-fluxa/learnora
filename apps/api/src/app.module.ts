@@ -6,6 +6,7 @@ import { HealthModule } from './modules/health/health.module.js'
 import { AuthModule } from './modules/auth/auth.module.js'
 import { PaymentsModule } from './modules/payments/payments.module.js'
 import { PlatformSchoolsModule } from './modules/platform-schools/platform-schools.module.js'
+import { PlatformAdminsModule } from './modules/platform-admins/platform-admins.module.js'
 import { LiveClassesModule } from './modules/live-classes/live-classes.module.js'
 import { AiModule } from './modules/ai/ai.module.js'
 import { SupabaseModule } from './providers/supabase/supabase.module.js'
@@ -35,6 +36,7 @@ const nodeEnv = process.env.NODE_ENV ?? 'development'
     AuthModule,
     PaymentsModule,
     PlatformSchoolsModule,
+    PlatformAdminsModule,
     LiveClassesModule,
     AiModule,
   ],
