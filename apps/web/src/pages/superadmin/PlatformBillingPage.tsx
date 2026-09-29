@@ -6,6 +6,7 @@ import { useAuth, profileToSidebarUser } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { logSupabaseError } from '../../lib/supabaseError'
 import { confirmSchoolSubscription } from '../../lib/platformBilling'
+import PendingTransfersPanel from '../../components/superadmin/PendingTransfersPanel'
 import { approveSettlement, createSettlement, getSuperAdminSettlementOverview, listSuperAdminSettlements, markSettlementPaid } from '../../lib/financeApi'
 
 type Props = { onNavigate: (page: string) => void }
@@ -404,6 +405,8 @@ export default function PlatformBillingPage({ onNavigate }: Props) {
             ))}
           </div>
         </div>
+
+        <PendingTransfersPanel onChange={loadData} />
 
         {/* School billing table */}
         <div className="bg-surface rounded-card shadow-sm overflow-hidden">

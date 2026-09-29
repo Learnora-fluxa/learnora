@@ -4,6 +4,7 @@ import DashboardLayout from '../../components/layout/DashboardLayout'
 import { adminNav } from '../../components/layout/Sidebar'
 import { useAuth, profileToSidebarUser } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
+import TrialEndedBanner from '../../components/admin/TrialEndedBanner'
 
 type Props = { onNavigate: (page: string) => void }
 
@@ -113,6 +114,7 @@ export default function AdminDashboardPage({ onNavigate }: Props) {
       user={sidebarUser}
     >
       <div className="max-w-[1300px] flex flex-col gap-6">
+        <TrialEndedBanner onNavigate={onNavigate} />
 
         {/* Onboarding checklist */}
         {showChecklist && completedCount < totalSteps && (

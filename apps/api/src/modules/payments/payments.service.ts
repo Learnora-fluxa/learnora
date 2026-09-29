@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config'
 import type { AuthenticatedUser } from '../auth/auth.types.js'
 import { SupabaseService } from '../../providers/supabase/supabase.service.js'
+import { SchoolSubscriptionService } from '../school-subscription/school-subscription.service.js'
 
 type ConfirmSchoolPaymentInput = {
   amount?: number
@@ -126,6 +127,7 @@ export class PaymentsService {
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly configService: ConfigService,
+    private readonly schoolSubscriptionService: SchoolSubscriptionService,
   ) {}
 
   private requireRole(user: AuthenticatedUser, allowedRoles: AuthenticatedUser['role'][]) {
@@ -1980,6 +1982,26 @@ export class PaymentsService {
     if (!reference) {
       await this.updateWebhookEventStatus(webhookEventId, 'failed', 'Missing payment reference')
       throw new BadRequestException('Webhook payload is missing a payment reference.')
+    }
+
+    // School subscription payments to Learnora aren't parent fee transactions;
+    // hand them to the subscription service instead of finalizeTransactionByReference.
+    const metadata = typeof event.data?.metadata === 'string'
+      ? (() => { try { return JSON.parse(event.data.metadata as string) as Record<string, unknown> } catch { return {} } })()
+      : (event.data?.metadata ?? {})
+    if (metadata.purpose === 'school_subscription') {
+      try {
+        const result = await this.schoolSubscriptionService.confirmPaystackPayment(reference, null)
+        await this.updateWebhookEventStatus(webhookEventId, 'processed')
+        return { received: true, processed: true, reference, duplicate: result.duplicate }
+      } catch (error) {
+        await this.updateWebhookEventStatus(
+          webhookEventId,
+          'failed',
+          error instanceof Error ? error.message : 'Subscription webhook processing failed',
+        )
+        throw error
+      }
     }
 
     try {
